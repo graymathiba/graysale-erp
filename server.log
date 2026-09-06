@@ -1,0 +1,2 @@
+Supermarket POS running at http://localhost:3000
+API health: http://localhost:3000/api/v1/health

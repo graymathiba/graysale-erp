@@ -1,0 +1,226 @@
+/* ============================================================
+   ClassicPOS Terminal — legacy desktop register layout
+   Prefix: cpos-  |  shared helpers reused across pages
+   ============================================================ */
+
+.mono { font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; }
+.muted { color: var(--faint, #94a3b8); }
+
+.cpos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: calc(100vh - 118px);
+  padding: 10px;
+  background: var(--surface, #f1f5f9);
+}
+
+.cpos .hidden { display: none !important; }
+
+/* ---------------- cart grid (top-left) ---------------- */
+.cpos-cart { grid-column: 1; grid-row: 1; min-width: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #cbd5e1; }
+.cpos-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; border-bottom: 1px solid #cbd5e1;
+  background: #0f172a; color: #e2e8f0; font-size: 11px; letter-spacing: .12em;
+}
+.cpos-title { font-weight: 700; }
+.cpos-shift { color: #fbbf24; font-family: ui-monospace, Consolas, monospace; }
+
+.cpos-table-wrap { flex: 1; overflow: auto; max-height: 46vh; }
+.cpos-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; }
+.cpos-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #e2e8f0; color: #334155; font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase; text-align: left; padding: 5px 8px;
+  border-bottom: 1px solid #cbd5e1;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.cpos-table tbody td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+.cpos-table .w-pn { width: 17%; }
+.cpos-table .w-desc { width: 39%; }
+.cpos-table .num { text-align: right; }
+.cpos-table .mono, .cpos-table .num.mono { font-family: ui-monospace, Consolas, monospace; }
+.cpos-table .desc { white-space: normal; line-height: 1.35; }
+.cpos-table .pname { display: block; }
+.cpos-table .bin { font-size: 10.5px; color: #64748b; font-family: ui-monospace, Consolas, monospace; }
+.cpos-row-sel { background: #fef9c3 !important; outline: 1px solid #eab308; }
+.cpos-empty, .cpos-empty2 { text-align: center; color: #94a3b8; padding: 22px 10px; font-size: 12px; }
+
+.cpos-status {
+  display: flex; gap: 18px; align-items: center; flex-wrap: nowrap;
+  padding: 5px 10px; border-top: 1px solid #cbd5e1; font-size: 11.5px; color: #475569;
+  background: #f8fafc;
+}
+.cpos-status b { color: #0f172a; }
+.cpos-status-total { margin-left: auto; }
+
+.cpos-fnbar {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px;
+  border-top: 1px solid #cbd5e1; background: #f1f5f9;
+}
+.cpos-fnbar .fn {
+  font-size: 12px; font-weight: 700; padding: 9px 6px; border-radius: 3px;
+  border: 1px solid #94a3b8; background: #fff; color: #0f172a; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; line-height: 1;
+}
+.cpos-fnbar .fn:hover { background: #e2e8f0; }
+.cpos-fnbar kbd { font-size: 10px; color: #64748b; font-family: ui-monospace, Consolas, monospace; }
+.cpos-fnbar .fn-save { border-color: #16a34a; }
+.cpos-fnbar .fn-pay { border-color: #b45309; background: #fef3c7; }
+
+/* ---------------- right column (keypad / totals / customer) ---------------- */
+.cpos-right { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.cpos-kp { background: #0f172a; border: 1px solid #020617; padding: 8px; color: #e2e8f0; }
+.cpos-kp-readout {
+  font-size: 26px; color: #fbbf24; text-align: right;
+  padding: 4px 8px 8px; border-bottom: 1px solid #1e293b; min-height: 34px; line-height: 1.1;
+  overflow: hidden;
+}
+.cpos-kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 0 6px; }
+.cpos-kp-grid button, .cpos-kp-ops button {
+  font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 600;
+  padding: 8px 0; border-radius: 3px; border: 1px solid #1e293b; background: #1e293b; color: #f1f5f9; cursor: pointer;
+}
+.cpos-kp-grid button:hover, .cpos-kp-ops button:hover { background: #334155; }
+.cpos-kp-grid .kp-minus { color: #fca5a5; }
+.cpos-kp-ops { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr; gap: 6px; }
+.cpos-kp-ops button { font-size: 12px; padding: 8px 4px; background: #111827; }
+.cpos-kp-ops .op-enter { background: #15803d; border-color: #15803d; color: #fff; font-size: 13px; font-weight: 800; }
+.cpos-kp-ops .op-enter:hover { background: #16a34a; }
+.cpos-kp-ops .op-kick { color: #fbbf24; border-color: #78350f; }
+.cpos-kp-ops .op-clr { color: #cbd5e1; }
+.cpos-kp-ops .op-x { color: #fca5a5; }
+
+.cpos-paymethods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding-top: 6px; }
+.cpos-paymethods .pm {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 700;
+  padding: 8px 2px; border-radius: 3px; cursor: pointer; border: 1px solid #1e293b; background: #111827; color: #cbd5e1;
+}
+.cpos-paymethods .pm:hover { background: #1f2937; }
+.cpos-paymethods .pm.on { background: #fbbf24; border-color: #fbbf24; color: #0f172a; }
+
+.cpos-totals { background: #fff; border: 1px solid #cbd5e1; padding: 10px 12px; }
+.cpos-total-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; font-size: 13px; }
+.cpos-total-row b { font-family: ui-monospace, Consolas, monospace; font-size: 15px; }
+.cpos-total-row.t-total { border-top: 1px dashed #94a3b8; margin-top: 2px; padding-top: 8px; }
+.cpos-total-row.t-total b { font-size: 24px; color: #0f172a; }
+.cpos-total-row.t-paid b { color: #15803d; }
+.cpos-total-row.t-chg b { color: #b45309; }
+.cpos-tender, .cpos-disc { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.cpos-tender label, .cpos-disc label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+.cpos-tender input, .cpos-disc input {
+  width: 110px; text-align: right; font-size: 16px; padding: 6px 8px;
+  border: 1px solid #94a3b8; border-radius: 3px; background: #f8fafc;
+}
+
+.cpos-cust { background: #fff; border: 1px solid #cbd5e1; padding: 8px 10px; }
+.cpos-cust-hd { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #334155; border-bottom: 1px solid #eef2f7; padding-bottom: 6px; }
+.cpos-cust-hd .btn-link { margin-left: auto; }
+.cpos-cust-card { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 4px; }
+.cpos-cust-main { display: flex; align-items: center; gap: 8px; }
+.cpos-cust-meta { flex: 1; min-width: 0; }
+.cpos-cust-name { font-size: 13px; font-weight: 700; }
+.cpos-cust-sub { font-size: 11px; color: #64748b; }
+.cpos-cust-stats { display: flex; gap: 14px; font-size: 11px; color: #475569; }
+.cpos-cust-stats b { font-family: ui-monospace, Consolas, monospace; color: #0f172a; }
+
+.cpos-cust-search input, .cpos-prod-search {
+  width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #94a3b8; border-radius: 3px; margin-top: 6px;
+}
+.cpos-cust-results { border: 1px solid #cbd5e1; border-top: none; max-height: 180px; overflow: auto; }
+.cpos-cust-result {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%;
+  padding: 6px 8px; background: #fff; border: 0; border-bottom: 1px solid #f1f5f9;
+  cursor: pointer; font-size: 12px; text-align: left;
+}
+.cpos-cust-result:hover { background: #fef9c3; }
+
+/* ---------------- bottom: departments + fast keys ---------------- */
+.cpos-bottom { grid-column: 1 / -1; grid-row: 2; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cpos-depts { display: flex; gap: 6px; align-items: center; }
+.cpos-dept {
+  font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 3px;
+  border: 1px solid transparent; cursor: pointer;
+}
+.cpos-prod-search { width: 220px; margin-left: auto; margin-top: 0; }
+
+.cpos-fast {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 6px;
+  max-height: 30vh; overflow: auto; padding: 2px;
+}
+.cpos-fastkey {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; padding: 6px 8px; cursor: pointer;
+  min-height: 52px;
+}
+.cpos-fastkey:hover { border-color: #94a3b8; background: #f8fafc; }
+.cpos-fastkey .fk-name { font-size: 12px; font-weight: 600; color: #0f172a; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cpos-fastkey .fk-price { font-size: 13px; color: #15803d; }
+.cpos-fastkey .fk-stock { font-size: 10px; color: #94a3b8; }
+
+.cpos-noshift {
+  position: fixed; right: 14px; bottom: 14px; z-index: 60;
+  display: flex; align-items: center; gap: 10px;
+  background: #7f1d1d; color: #fff; font-size: 12px; font-weight: 600;
+  padding: 8px 12px; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+}
+
+/* ---------------- payment modal ---------------- */
+.cpos-paymodal { display: flex; flex-direction: column; gap: 12px; }
+.cpos-paytotal { font-size: 38px; font-weight: 700; text-align: right; color: #0f172a; }
+.cpos-paycash { display: flex; flex-direction: column; gap: 8px; }
+.quick-amt { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------------- layby modal ---------------- */
+.layby-modal { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.layby-hd { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #334155; margin-bottom: 6px; }
+.layby-cust, .layby-deposit, .layby-pay, .layby-activity, .layby-payamt { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; }
+.layby-line { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+.layby-line b { font-weight: 700; }
+.layby-bal { border-top: 1px dashed #94a3b8; margin-top: 6px; padding-top: 8px; font-size: 15px; }
+.layby-bal b { color: #b45309; }
+.layby-sum { display: flex; justify-content: space-between; font-size: 11.5px; color: #64748b; margin-top: 8px; }
+.layby-cust-new { margin-top: 8px; padding: 10px; border: 1px dashed #94a3b8; border-radius: 4px; }
+.layby-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.layby-item {
+  display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 3px;
+  background: #fff; cursor: pointer; font-size: 12.5px;
+}
+.layby-item.on { border-color: #16a34a; background: #f0fdf4; }
+.layby-hint { font-size: 12px; color: #64748b; margin: 4px 0 0; }
+
+/* ---------------- user management table ---------------- */
+.umt-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.umt-count { font-size: 12px; color: #64748b; font-family: ui-monospace, Consolas, monospace; }
+.umt-table-wrap { overflow-x: auto; }
+.umt-table { width: 100%; }
+.umt-table .umt-name { font-weight: 600; font-size: 13px; }
+.umt-role {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+  padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; color: #0f172a;
+}
+.umt-table .num { text-align: right; }
+.umt-actions { text-align: right; }
+
+/* reuse from theme if missing */
+.btn-link { background: none; border: none; color: var(--accent, #2563eb); cursor: pointer; font-size: 12px; padding: 0 6px; }
+.btn-link:hover { text-decoration: underline; }
+.btn-link.warn { color: #b45309; }
+.btn-link.danger { color: #b91c1c; }
+.row-actions { display: flex; gap: 2px; justify-content: flex-end; white-space: nowrap; }
+.cd-sub { font-size: 11.5px; color: #64748b; }
+.hint { font-size: 12px; color: #64748b; margin: 4px 0; }
+
+/* ---------- industry-grade additions: tier + UOM + FEFO ---------- */
+.cpos-tier-select { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; background: #fff; color: #0f172a; }
+.cpos-uoms { display: inline-flex; align-items: center; gap: 4px; }
+.uom-btn {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px; padding: 2px 7px;
+  border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #475569; cursor: pointer;
+}
+.uom-btn:hover { border-color: #2563eb; color: #2563eb; }
+.cpos-status span { gap: 4px; }

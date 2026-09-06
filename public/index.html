@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a1a">
+  <title>GraySale ERP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div id="menuBtn" class="menu-btn" aria-label="Menu">☰</div>
+    <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">GS</div>
+        <div>
+          <h1>GraySale ERP</h1>
+          <p>One ERP · One Login</p>
+        </div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="checkout">Checkout / POS</button>
+        <button class="nav-item" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="products">Products</button>
+        <button class="nav-item" data-view="inventory">Inventory</button>
+        <button class="nav-item" data-view="customers">Customers</button>
+        <button class="nav-item" data-view="sales">Sales History</button>
+        <button class="nav-item" data-view="accounting">Accounting</button>
+        <button class="nav-item" data-view="agents">Agents</button>
+        <button class="nav-item admin-only" data-view="users">Users</button>
+        <button class="nav-item admin-only" data-view="audit">Audit Log</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="syncStatus" class="sync-badge sync-off">Offline</div>
+        <button id="backupBtn">Run Backup Now</button>
+        <span id="backupStatus"></span>
+        <div class="user-box">
+          <span id="currentUser" class="user-label"></span>
+          <button class="btn btn-secondary" id="logoutBtn" style="width:100%;margin-top:6px">Logout</button>
+        </div>
+      </div>
+    </aside>
+    <main id="main">
+      <section id="view-checkout" class="view active"></section>
+      <section id="view-dashboard" class="view"></section>
+      <section id="view-products" class="view"></section>
+      <section id="view-inventory" class="view"></section>
+      <section id="view-customers" class="view"></section>
+      <section id="view-sales" class="view"></section>
+      <section id="view-accounting" class="view"></section>
+      <section id="view-agents" class="view"></section>
+      <section id="view-users" class="view"></section>
+      <section id="view-audit" class="view"></section>
+    </main>
+  </div>
+  <div id="loginOverlay">
+    <div class="login-box">
+      <div class="login-logo">GS</div>
+      <h1>GraySale ERP</h1>
+      <p class="muted">Sign in to continue</p>
+      <input id="loginUser" placeholder="Username" autocomplete="username">
+      <input id="loginPass" placeholder="Password" type="password" autocomplete="current-password">
+      <button class="btn btn-primary" id="loginBtn">Sign In</button>
+      <div id="loginError" class="login-error"></div>
+    </div>
+  </div>
+  <div id="toast-container"></div>
+  <div id="receipt"></div>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "graysale",
+  "version": "0.1.0",
+  "description": "GraySale — retail POS + accounting suite, local-first on SQLite",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/db/seed.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "license": "UNLICENSED"
+}
