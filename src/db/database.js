@@ -18,7 +18,7 @@ export function createDb(path = DB_PATH) {
   return db;
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 6;
 
 export function migrate(db) {
   const version = getVersion(db);
@@ -26,6 +26,8 @@ export function migrate(db) {
   if (version < 2) migrateV2(db);
   if (version < 3) migrateV3(db);
   if (version < 4) migrateV4(db);
+  if (version < 5) migrateV5(db);
+  if (version < 6) migrateV6(db);
   setVersion(db, SCHEMA_VERSION);
 }
 
@@ -744,4 +746,111 @@ function migrateV4(db) {
   }
 }
 
-export default { createDb, migrate };
+// ── v5: Multi-tenant Control Tower ― tenants, product activation keys, and the
+// super-admin flag. Lets the software owner (platform admin) manage independent
+// GraySale instances outside normal tenant boundaries. Uses UUID blob/string ids
+// so a deployment may later be replicated across a multi-instance fleet.
+function migrateV5(db) {
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS tenants (
+    id TEXT PRIMARY KEY,
+    company_name TEXT NOT NULL,
+    owner_email TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    license_key TEXT,
+    license_expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_license_key ON tenants(license_key);
+
+  CREATE TABLE IF NOT EXISTS product_keys (
+    id TEXT PRIMARY KEY,
+    key_code TEXT UNIQUE NOT NULL,
+    plan_type TEXT NOT NULL,
+    duration_days INTEGER NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'UNUSED',
+    assigned_tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    generated_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_product_keys_status ON product_keys(status);
+  CREATE INDEX IF NOT EXISTS idx_product_keys_assigned_tenant ON product_keys(assigned_tenant_id);
+  `);
+
+  // Global software-owner flag on user accounts.
+  try { db.exec('ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+
+  // A single-instance deployment still needs a "current tenant" to license-check
+  // against. Seed one lazily only when the table is empty, keyed off company.name.
+  const hasTenant = db.prepare('SELECT COUNT(*) AS c FROM tenants').get().c;
+  if (hasTenant === 0) {
+    const name = db.prepare("SELECT value FROM settings WHERE key = 'company.name'").get()?.value || 'My Store';
+    db.prepare(
+      'INSERT INTO tenants (id, company_name, owner_email, status, license_expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(uuid(), name, '', 'ACTIVE', null);
+  }
+}
+
+// ── v6: tenant self-service plumbing. Adds a `tenant_id` column to user
+// accounts so the Control Tower and tenant-profile flows can resolve the owner
+// user and per-tenant user counts, and adds the `company_settings` table used
+// by the tenant/company profile self-service pages. All prior users are
+// backfilled to the single current tenant so nothing breaks on upgrade.
+function migrateV6(db) {
+  try { db.exec('ALTER TABLE users ADD COLUMN tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL'); } catch (_) {}
+
+  // Backfill every existing user to the current tenant (the one licensed above).
+  const tenant = db.prepare('SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1').get();
+  if (tenant) {
+    db.prepare('UPDATE users SET tenant_id = ? WHERE tenant_id IS NULL').run(tenant.id);
+  }
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS company_settings (
+    id INTEGER PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+    company_name TEXT,
+    trading_as TEXT,
+    tagline TEXT,
+    address TEXT,
+    telephone TEXT,
+    mobile TEXT,
+    reg_number TEXT,
+    tin_number TEXT,
+    vat_number TEXT,
+    banking_details TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_company_settings_tenant ON company_settings(tenant_id);
+
+  CREATE TABLE IF NOT EXISTS sync_sales (
+    local_id TEXT PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+    total_cents INTEGER NOT NULL,
+    payment_method TEXT,
+    lines_json TEXT,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_sync_sales_tenant ON sync_sales(tenant_id);
+  `);
+}
+
+// RFC-4122 v4 UUID string (SQLite has no gen_random_uuid built in).
+export function uuid() {
+  let b = '';
+  for (let i = 0; i < 16; i++) b += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+  return `${b.slice(0, 8)}-${b.slice(8, 12)}-4${b.slice(13, 16)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${b.slice(17, 20)}-${b.slice(20, 32)}`;
+}
+
+// Resolve the single "current" tenant (a standalone deployment licenses one
+// tenant against its local db). All newly-created user accounts are scoped to
+// this tenant so tenant-scoped queries (owner lookup, active user counts) see
+// them.
+export function currentTenant(db) {
+  return db.prepare('SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1').get() || null;
+}
+
+export default { createDb, migrate, uuid, currentTenant };

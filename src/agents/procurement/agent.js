@@ -17,21 +17,41 @@ class ProcurementAgent extends Agent {
 
   async handle(message) {
     const { domain, payload } = message;
+    const parts = domain.split('.');
+    const prefix = parts[0];
+    const action = parts.slice(1).join('.');
 
-    switch (domain) {
-      case 'po.create': return this.createPO(payload);
-      case 'po.receive': return this.receivePO(payload);
-      case 'po.partial_receive': return this.partialReceive(payload);
-      case 'po.cancel': return this.cancelPO(payload);
-      case 'po.list': return this.listPOs();
-      case 'po.get': return this.getPO(payload);
-      case 'purchase.create': return this.createPO(payload);
-      case 'purchase.receive': return this.receivePO(payload);
-      case 'vendor.list': return this.listVendors();
-      case 'vendor.create': return this.createVendor(payload);
-      case 'vendor.evaluate': return this.evaluateVendor(payload);
-      case 'invoice.match_3way': return this.threeWayMatch(payload);
-      default: return createResult({ status: ResultStatus.FAILURE, error: `Unknown procurement action: ${domain}` });
+    switch (prefix) {
+      case 'po':
+        switch (action) {
+          case 'create': return this.createPO(payload);
+          case 'receive': return this.receivePO(payload);
+          case 'partial_receive': return this.partialReceive(payload);
+          case 'cancel': return this.cancelPO(payload);
+          case 'list': return this.listPOs();
+          case 'get': return this.getPO(payload);
+          default: return createResult({ status: ResultStatus.FAILURE, error: `Unknown po action: ${action}` });
+        }
+      case 'purchase':
+        switch (action) {
+          case 'create': return this.createPO(payload);
+          case 'receive': return this.receivePO(payload);
+          default: return createResult({ status: ResultStatus.FAILURE, error: `Unknown purchase action: ${action}` });
+        }
+      case 'vendor':
+        switch (action) {
+          case 'list': return this.listVendors();
+          case 'create': return this.createVendor(payload);
+          case 'evaluate': return this.evaluateVendor(payload);
+          default: return createResult({ status: ResultStatus.FAILURE, error: `Unknown vendor action: ${action}` });
+        }
+      case 'invoice':
+        switch (action) {
+          case 'match_3way': return this.threeWayMatch(payload);
+          default: return createResult({ status: ResultStatus.FAILURE, error: `Unknown invoice action: ${action}` });
+        }
+      default:
+        return createResult({ status: ResultStatus.FAILURE, error: `Unknown procurement domain: ${prefix}` });
     }
   }
 

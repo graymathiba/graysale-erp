@@ -12,8 +12,11 @@ import { autoBackup, backupToLocalFolder } from './backup/backup.js';
 import { createOrchestrator } from './agents/index.js';
 import { createMessage, ResultStatus, MessageType } from './agents/message.js';
 import { AuthService, hashPassword, validatePassword, CAP_RANK, ROLE_RANK } from './auth.js';
+import { currentTenant } from './db/database.js';
+import { isTenantOwner } from './licensing/owner.js';
 import { EventHub } from './events.js';
 import { createGsRouter } from './gs/index.js';
+import { LicensingService, makeEnforceTenantStatus } from './licensing/index.js';
 
 const PORT = process.env.PORT || 3000;
 const store = new Store();
@@ -23,6 +26,10 @@ const report = new ReportingService(store);
 const orch = createOrchestrator(store, store.db);
 const auth = new AuthService(store);
 const events = new EventHub();
+
+// Licensing / multi-tenant Control Tower services.
+const licensing = new LicensingService(store.db, auth);
+const enforceTenantStatus = makeEnforceTenantStatus(store.db);
 
 // Retail (graysale) services — serve routes the main handler does not own.
 const gs = createGsRouter(store, auth);
@@ -160,6 +167,34 @@ async function handleApi(req, res, url) {
     return true;
   };
 
+  // Require an authenticated user; returns false (after writing 401) when absent.
+  const requireAuth = () => {
+    if (currentUser) return true;
+    json(res, 401, { error: 'UNAUTHORIZED' });
+    return false;
+  };
+
+  // Strict Control Tower gate: only global super-admin accounts may reach
+  // /api/v1/superadmin/*. Returns true when the caller is allowed to proceed.
+  const licensingSuperAdminGate = () => {
+    if (auth.requireSuperAdmin(currentUser)) return true;
+    json(res, 403, { error: 'FORBIDDEN: super admin only' });
+    return false;
+  };
+
+  // Audit trail for Control Tower operations (owner scope).
+  const auditSuper = (action, data) => {
+    auth.audit(currentUser?.id, currentUser?.username, action, 'tenant', data?.id ?? null, JSON.stringify(data));
+  };
+
+  // The single licensed tenant this instance runs as, for the web client's
+  // activation gate and tenant-context UI. Super-admin accounts operate outside
+  // tenant boundaries (mirrors the standalone GraySale tenantForUser()).
+  const tenantForUser = (u) => {
+    if (auth.isSuperAdmin(u)) return null;
+    return licensing.currentTenant();
+  };
+
   // ── Request rate limiting ────────────────────────────────────────────
   scheduleRateCleanup();
   const isLogin = top === 'auth' && route[1] === 'login';
@@ -176,6 +211,177 @@ async function handleApi(req, res, url) {
     return json(res, status, body);
   };
 
+  // ── Tenant license enforcement ────────────────────────────────────────
+  // Applied to every tenant-facing request. Super-admin / activation endpoints
+  // are exempt so a blocked or expired instance can never lock out the owner
+  // or prevent a key redemption.
+  const isSuperAdminTop = top === 'superadmin';
+  const isActivationTop = top === 'license' && route[1] === 'activate';
+  if (!isSuperAdminTop && !isActivationTop) {
+    if (enforceTenantStatus(req, res, route)) return true;
+  }
+
+  // ---------- License activation (tenant-facing) ----------
+  // GET /api/v1/license/status — current tenant license status for the
+  // activation wall. Exempt from the tenant gate so pending instances can read it.
+  if (top === 'license' && route[1] === 'status' && method === 'GET') {
+    const tenant = licensing.currentTenant();
+    if (!tenant) return respond(404, { error: 'NO_TENANT' });
+    const key = tenant.license_key
+      ? licensing.keys.getByCode(tenant.license_key)
+      : null;
+    const status = tenant.status === 'ACTIVE' && tenant.isExpired
+      ? 'EXPIRED' : tenant.status;
+    return respond(200, {
+      tenantId: tenant.id,
+      companyName: tenant.company_name,
+      status,
+      activationRequired: status === 'PENDING_KEY' || status === 'PENDING_ACTIVATION' || status === 'BLOCKED',
+      licenseKey: tenant.license_key || null,
+      licenseExpiresAt: tenant.license_expires_at || null,
+      planType: key?.plan_type || null,
+    });
+  }
+
+  // POST /api/v1/license/activate — redeem a Control Tower product key.
+  if (top === 'license' && route[1] === 'activate' && method === 'POST') {
+    const b = await readBody(req);
+    const keyCode = b.keyCode || b.key_code;
+    if (!keyCode) return respond(400, { error: 'MISSING_FIELD:keyCode' });
+    try {
+      const tenant = licensing.currentTenant();
+      if (!tenant) return respond(404, { error: 'NO_TENANT' });
+      const result = licensing.keys.redeem(keyCode, tenant.id);
+      if (!result.ok) return respond(result.code === 'TENANT_NOT_FOUND' ? 404 : 400, result);
+      auth.audit(currentUser?.id, currentUser?.username, 'LICENSE_ACTIVATE', 'tenant', tenant.id, keyCode);
+      return respond(200, { ok: true, tenant: result.tenant });
+    } catch (e) {
+      return respond(500, { error: e.message });
+    }
+  }
+
+  // ---------- Super Admin / Control Tower (is_super_admin only) ----------
+  if (top === 'superadmin') {
+    if (!licensingSuperAdminGate()) return true;
+    const sub = route[1];
+
+    // GET /api/v1/superadmin/overview — Platform overview metrics (View C)
+    if (method === 'GET' && sub === 'overview') {
+      return respond(200, licensing.overview());
+    }
+
+    // ------------- tenants (View A) -------------
+    if (sub === 'tenants') {
+      if (method === 'GET' && route.length === 2) {
+        return respond(200, licensing.tenants.list({
+          search: url.searchParams.get('search'),
+          status: url.searchParams.get('status'),
+        }));
+      }
+      if (method === 'POST' && route.length === 2) {
+        const b = await readBody(req);
+        try {
+          const t = licensing.tenants.create(b);
+          auditSuper('TENANT_CREATE', t);
+          return respond(201, t);
+        } catch (e) {
+          const st = Number.isInteger(e?.status) ? e.status : 400;
+          return respond(st, { error: e.message });
+        }
+      }
+      // /superadmin/tenants/:id
+      if (route.length === 3) {
+        const id = route[2];
+        const tenant = licensing.tenants.get(id);
+        if (!tenant) return respond(404, { error: 'TENANT_NOT_FOUND' });
+        if (method === 'GET') return respond(200, tenant);
+        if ((method === 'POST' || method === 'PUT') && route[3] === undefined) {
+          const b = await readBody(req);
+          // Normalize the Control Tower payload (snake_case from the UI) into
+          // the camelCase the services expect, then apply credential overrides.
+          const fields = {
+            companyName: b.company_name,
+            ownerEmail: b.owner_email,
+            owner_username: b.owner_username,
+            new_password: b.new_password,
+            address: b.address,
+            telephone: b.telephone,
+            mobile: b.mobile,
+            trading_as: b.trading_as,
+          };
+          const next = licensing.profile.adminUpdate(id, fields, currentUser);
+          auditSuper('TENANT_UPDATE', next);
+          return respond(200, next);
+        }
+      }
+      // POST /superadmin/tenants/:id/toggle — block / unblock
+      if (route.length === 4 && route[3] === 'toggle' && method === 'POST') {
+        const t = licensing.tenants.toggleAccess(route[2]);
+        if (!t) return respond(404, { error: 'TENANT_NOT_FOUND' });
+        auditSuper(t.status === 'BLOCKED' ? 'TENANT_BLOCK' : 'TENANT_UNBLOCK', t);
+        return respond(200, t);
+      }
+      // POST /superadmin/tenants/:id/extend — extend subscription by N days
+      if (route.length === 4 && route[3] === 'extend' && method === 'POST') {
+        const b = await readBody(req);
+        const missing = requireFields(b, ['days']);
+        if (missing) return respond(400, { error: missing });
+        try {
+          const t = licensing.tenants.extend(route[2], b.days);
+          if (!t) return respond(404, { error: 'TENANT_NOT_FOUND' });
+          auditSuper('TENANT_EXTEND', { ...t, days: b.days });
+          return respond(200, t);
+        } catch (e) {
+          return respond(400, { error: e.message });
+        }
+      }
+    }
+
+    // ------------- product keys (View B) -------------
+    if (sub === 'keys') {
+      if (method === 'GET' && route.length === 2) {
+        return respond(200, licensing.keys.list({
+          status: url.searchParams.get('status'),
+          search: url.searchParams.get('search'),
+        }));
+      }
+      if (method === 'POST' && route.length === 3 && route[2] === 'generate') {
+        const b = await readBody(req);
+        const missing = requireFields(b, ['planType']);
+        if (missing) return respond(400, { error: missing });
+        try {
+          const r = licensing.keys.generate({
+            planType: b.planType,
+            count: b.count || 1,
+            generatedBy: currentUser?.id,
+          });
+          auditSuper('KEY_GENERATE', { planType: b.planType, count: r.count });
+          return respond(201, r);
+        } catch (e) {
+          return respond(400, { error: e.message });
+        }
+      }
+      // POST /superadmin/keys/:id/revoke
+      if (route.length === 4 && route[3] === 'revoke' && method === 'POST') {
+        const k = licensing.keys.revoke(route[2]);
+        if (!k) return respond(404, { error: 'KEY_NOT_FOUND' });
+        auditSuper('KEY_REVOKE', { keyCode: k.key_code });
+        return respond(200, k);
+      }
+      // POST /superadmin/keys/check — validate a key without redeeming
+      if (route.length === 3 && route[2] === 'check' && method === 'POST') {
+        const b = await readBody(req);
+        const missing = requireFields(b, ['keyCode']);
+        if (missing) return respond(400, { error: missing });
+        const k = licensing.keys.getByCode(b.keyCode);
+        if (!k) return respond(404, { error: 'INVALID_KEY' });
+        return respond(200, k);
+      }
+    }
+
+    return respond(404, { error: 'SUPERADMIN_BAD_ROUTE' });
+  }
+
   // ---------- Auth ----------
   if (top === 'auth') {
     if (method === 'POST' && route[1] === 'login') {
@@ -183,6 +389,7 @@ async function handleApi(req, res, url) {
       const result = auth.login({ username: b.username, password: b.password });
       const st = result.ok ? 200 : 401;
       logRequest({ method, path, status: st, durationMs: Date.now() - started, userId: result.user?.id, ip: clientIp(req) });
+      if (result.ok) result.tenant = tenantForUser(result.user);
       return json(res, st, result);
     }
     if (method === 'POST' && route[1] === 'logout') {
@@ -192,7 +399,10 @@ async function handleApi(req, res, url) {
     if (method === 'GET' && route[1] === 'me') {
       const st = currentUser ? 200 : 401;
       logRequest({ method, path, status: st, durationMs: Date.now() - started, userId: currentUser?.id, ip: clientIp(req) });
-      return json(res, st, currentUser ? { user: currentUser } : { error: 'UNAUTHORIZED' });
+      // Return the same public (camelCase) identity shape as login so the web
+      // client's isSuperAdmin / capabilities checks behave consistently.
+      const me = currentUser ? auth.publicUser(currentUser) : null;
+      return json(res, st, currentUser ? { user: me, tenant: tenantForUser(me) } : { error: 'UNAUTHORIZED' });
     }
     return false;
   }
@@ -214,8 +424,8 @@ async function handleApi(req, res, url) {
         if (validatePassword && !validatePassword(b.password)) {
           return respond(400, { error: 'WEAK_PASSWORD: must be 8+ chars with upper, lower and digit' });
         }
-        const u = auth.store.db.prepare('INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)')
-          .run(b.username, hashPassword(b.password), b.fullName || b.username, b.role || 'cashier');
+        const u = auth.store.db.prepare('INSERT INTO users (username, password_hash, full_name, role, tenant_id) VALUES (?, ?, ?, ?, ?)')
+          .run(b.username, hashPassword(b.password), b.fullName || b.username, b.role || 'cashier', currentTenant(auth.store.db)?.id ?? null);
         auth.audit(currentUser.id, currentUser.username, 'USER_CREATE', 'user', u.lastInsertRowid, b.username);
         return respond(201, { id: u.lastInsertRowid });
       } catch (e) {
@@ -684,6 +894,12 @@ async function handleApi(req, res, url) {
       if (method === 'GET' && route.length === 1) {
         return respond(200, orch.agents());
       }
+      // GET /api/v1/agents/:id/status — agent health/status
+      if (method === 'GET' && route.length === 3 && route[2] === 'status') {
+        const agent = orch.registry?.get(route[1]);
+        if (!agent) return respond(404, { error: 'AGENT_NOT_FOUND' });
+        return respond(200, agent.info());
+      }
       // GET /api/v1/agents/history — orchestrator message history
       if (method === 'GET' && route[1] === 'history') {
         return respond(200, orch.history(Number(url.searchParams.get('limit')) || 50));
@@ -899,6 +1115,113 @@ async function handleApi(req, res, url) {
         return respond(200, result);
       }
     } catch (e) { return respond(500, { error: e.message }); }
+  }
+
+  // ---------- Tenant self-service (company profile + owner credentials) ----------
+  if (top === 'tenant' && route[1] === 'profile') {
+    if (!requireAuth()) return true;
+    if (method === 'GET' && route.length === 2) {
+      try {
+        const profile = licensing.profile.get(null);
+        if (!profile) return respond(404, { error: 'TENANT_NOT_FOUND' });
+        return respond(200, profile);
+      } catch (e) { return respond(500, { error: e.message }); }
+    }
+    if (method === 'PUT' && route.length === 2) {
+      try {
+        const b = await readBody(req);
+        const profile = licensing.profile.update(b, null, currentUser);
+        return respond(200, profile);
+      } catch (e) {
+        const st = Number.isInteger(e?.status) ? e.status : 400;
+        return respond(st, { error: e.message });
+      }
+    }
+    return respond(404, { error: 'BAD_ROUTE' });
+  }
+
+  // ---------- Company settings (invoice/quote business profile) ----------
+  if (top === 'company-settings') {
+    if (!requireAuth()) return true;
+    try {
+      if (method === 'GET' && route.length === 1) {
+        const cs = licensing.company.get(null);
+        if (!cs) return respond(404, { error: 'TENANT_NOT_FOUND' });
+        return respond(200, cs);
+      }
+      if (method === 'PUT' && route.length === 1) {
+        // Owner OR a manager/admin with settings.manage — matches the UI gate
+        // (CompanySettingsPage uses can('settings.manage')).
+        const currentTenantRow = licensing.currentTenant();
+        const isOwner = currentTenantRow && isTenantOwner(store.db, currentTenantRow.id, currentUser);
+        if (!isOwner && !requireRole('settings.manage')) return true;
+        const b = await readBody(req);
+        const cs = licensing.company.update(b, null);
+        return respond(200, cs);
+      }
+      return respond(404, { error: 'BAD_ROUTE' });
+    } catch (e) {
+      const st = Number.isInteger(e?.status) ? e.status : 400;
+      return respond(st, { error: e.message });
+    }
+  }
+
+  // ---------- Offline POS sync (idempotent) ----------
+  // POST /api/v1/sync/sales — Flutter/offline POS pushes queued local sales.
+  // Idempotent: rows are keyed by the client-supplied local_id; re-sends of the
+  // same local id are ignored (ON CONFLICT DO NOTHING), so a retry after a
+  // network drop never creates duplicate receipts.
+  if (top === 'sync' && route[1] === 'sales' && method === 'POST') {
+    if (!requireAuth()) return true;
+    try {
+      const b = await readBody(req);
+      const sales = Array.isArray(b.sales) ? b.sales : [];
+      const tenant = licensing.currentTenant();
+      if (!tenant) return respond(404, { error: 'NO_TENANT' });
+      const tenantId = tenant.id;
+      const created = [];
+      const duplicates = [];
+      const db = store.db;
+
+      db.exec('BEGIN');
+      try {
+        const insSync = db.prepare(
+          `INSERT OR IGNORE INTO sync_sales (local_id, tenant_id, total_cents, payment_method, lines_json, synced_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`
+        );
+        const insSale = db.prepare(
+          `INSERT INTO sales (receipt_no, subtotal_cents, tax_cents, total_cents, payment_method, status, created_at)
+           VALUES (?, ?, ?, ?, ?, 'complete', ?)`
+        );
+
+        for (const sale of sales) {
+          if (!sale.id) return respond(400, { error: 'LOCAL_ID_REQUIRED' });
+          const totalCents = Number(sale.totalCents ?? sale.total_cents ?? 0);
+          const method = sale.paymentMethod || sale.payment_method || 'cash';
+          const subtotalCents = Number(sale.subtotalCents ?? sale.subtotal_cents ?? totalCents);
+          const taxCents = Number(sale.taxCents ?? sale.tax_cents ?? 0);
+          const createdAt = sale.createdAt || sale.created_at || new Date().toISOString();
+
+          const sync = insSync.run(sale.id, tenantId, totalCents, method, JSON.stringify(sale.lines || []));
+          if (sync.changes === 0) { duplicates.push(sale.id); continue; } // already synced
+
+          insSale.run(
+            `SYNC-${sale.id}`,
+            subtotalCents, taxCents, totalCents, method, createdAt
+          );
+          created.push(sale.id);
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+
+      auth.audit(currentUser?.id, currentUser?.username, 'SYNC_SALES', 'tenant', tenantId, `created=${created.length} dup=${duplicates.length}`);
+      return respond(200, { success: true, syncedIds: created, duplicates });
+    } catch (e) {
+      return respond(500, { error: e.message });
+    }
   }
 
   // ---------- Retail (graysale) fallback ----------

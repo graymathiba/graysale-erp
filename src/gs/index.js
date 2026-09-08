@@ -16,6 +16,7 @@ import { ReportingService } from './reporting.js';
 import { buildRoutes, matchGsRoute } from './routes.js';
 import { AppError } from './errors.js';
 import { hashPassword } from '../auth.js';
+import { currentTenant } from '../db/database.js';
 
 // graysale roles -> main ERP roles. Keep main role stored so rank-based caps work.
 const ROLE_TO_MAIN = { owner: 'admin', accountant: 'manager' };
@@ -35,8 +36,8 @@ function makeGsAuth(mainAuth) {
       const existing = mainAuth.store.db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) throw new AppError(`DUPLICATE_USERNAME: ${username}`, 409);
       const info = mainAuth.store.db.prepare(
-        'INSERT INTO users (username, password_hash, full_name, role, location_id) VALUES (?, ?, ?, ?, ?)'
-      ).run(username, hashPassword(password), fullName || username, mainRole, locationId ?? null);
+        'INSERT INTO users (username, password_hash, full_name, role, location_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(username, hashPassword(password), fullName || username, mainRole, locationId ?? null, currentTenant(mainAuth.store.db)?.id ?? null);
       return info.lastInsertRowid;
     },
     updateUser(id, fields) {

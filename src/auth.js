@@ -1,6 +1,7 @@
 // Authentication: scrypt password hashing, DB-backed sessions,
 // role-based authorization, rate limiting. No external dependencies.
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { currentTenant } from './db/database.js';
 
 export const ROLES = Object.freeze({
   CASHIER: 'cashier',
@@ -151,7 +152,18 @@ class AuthService {
 
   publicUser(u) {
     const caps = this.listUserCapabilities(u.id);
-    return { id: u.id, username: u.username, fullName: u.full_name, role: u.role, active: u.active, capabilities: caps };
+    return { id: u.id, username: u.username, fullName: u.full_name, role: u.role, active: u.active, isSuperAdmin: !!u.is_super_admin, capabilities: caps };
+  }
+
+  // Super admins live outside normal tenant boundaries. Only accounts carrying
+  // the global is_super_admin flag may reach the Control Tower `/admin/*` APIs.
+  isSuperAdmin(user) {
+    return !!user && !!(user.is_super_admin || user.isSuperAdmin);
+  }
+
+  requireSuperAdmin(user) {
+    if (!this.isSuperAdmin(user)) return false;
+    return true;
   }
 
   requireCapability(user, capability) {
@@ -250,23 +262,32 @@ class AuthService {
 
   listUsers() {
     return this.store.db.prepare(
-      'SELECT id, username, full_name, role, active, created_at FROM users ORDER BY username'
+      'SELECT id, username, full_name, role, active, is_super_admin, created_at FROM users ORDER BY username'
     ).all();
   }
 
   ensureDefaultAdmin({ username, password, fullName } = {}) {
-    const count = this.store.db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-    if (count > 0) return false;
-
-    const pw = password || 'Admin123';
-    if (!validatePassword(pw)) {
-      throw new Error('Default admin password does not meet complexity requirements');
+    const db = this.store.db;
+    const name = username || 'admin';
+    const count = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+    if (count === 0) {
+      const pw = password || 'Admin123';
+      if (!validatePassword(pw)) {
+        throw new Error('Default admin password does not meet complexity requirements');
+      }
+      const tenant = currentTenant(db);
+      // The bootstrapped account is the platform administrator: it carries the
+      // global is_super_admin flag so the Control Tower is reachable out of the box.
+      db.prepare(
+        'INSERT INTO users (username, password_hash, full_name, role, tenant_id, is_super_admin) VALUES (?, ?, ?, ?, ?, 1)'
+      ).run(name, hashPassword(pw), fullName || 'Administrator', ROLES.ADMIN, tenant ? tenant.id : null);
+      return true;
     }
 
-    this.store.db.prepare(
-      'INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)'
-    ).run(username || 'admin', hashPassword(pw), fullName || 'Administrator', ROLES.ADMIN);
-    return true;
+    // Idempotent upgrade for installs that predate the super-admin flag: the
+    // bootstrapped platform account always gets Control Tower access.
+    db.prepare('UPDATE users SET is_super_admin = 1 WHERE username = ? AND is_super_admin = 0').run(name);
+    return false;
   }
 
   _isRateLimited(username) {

@@ -5,6 +5,7 @@ import { SagaRunner } from './saga.js';
 import { randomUUID } from 'node:crypto';
 
 const MAX_LOG_SIZE = 1000;
+const DEDUP_TTL_MS = 24 * 60 * 60 * 1000; // 24h default
 
 class Orchestrator {
   constructor({ db } = {}) {
@@ -13,6 +14,14 @@ class Orchestrator {
     this.risk = new RiskEngine();
     this.saga = new SagaRunner({ db });
     this.log = [];
+    this.dedupTtlMs = DEDUP_TTL_MS;
+  }
+
+  // Purge dedup entries older than the TTL. Best-effort; no-op without a db.
+  async _purgeStaleDedup() {
+    if (!this.db) return;
+    const cutoff = new Date(Date.now() - this.dedupTtlMs).toISOString();
+    await this.db.run('DELETE FROM message_dedup WHERE processed_at < ?', [cutoff]);
   }
 
   register(agent, domains) {
@@ -40,6 +49,7 @@ class Orchestrator {
   }
 
   async send(message) {
+    await this._purgeStaleDedup();
     const dedupResult = await this._getCachedResult(message.id);
     if (dedupResult) return dedupResult;
 
