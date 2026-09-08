@@ -7,20 +7,25 @@ import { fmtMoney } from '../lib/format';
 export default function DashboardPage() {
   const { user } = useAuth();
   const toast = useToast();
-  const [data, setData] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
     (async () => {
-      try { setData(await api.get('/dashboard')); }
-      catch (e) { if (e?.silent) return; toast.err(e.message); }
+      try {
+        // Real financial aggregates (cash / mobile / AR / AP) + the weekly
+        // sparkline & stock alerts from the dashboard report.
+        const [s, d] = await Promise.all([api.get('/dashboard/stats'), api.get('/dashboard')]);
+        setStats(s);
+        setSummary(d);
+      } catch (e) { if (e?.silent) return; toast.err(e.message); }
     })();
   }, []);
 
-  if (!data) return <div className="loader"><span className="spinner" />Loading…</div>;
+  if (!stats || !summary) return <div className="loader"><span className="spinner" />Loading…</div>;
 
-  const today = data.today || {};
-  const byDay = data.byDay || [];
-  const lowStock = data.lowStock || [];
+  const byDay = summary.byDay || [];
+  const lowStock = summary.lowStock || [];
   const maxRow = Math.max(1, ...byDay.map((r) => r.sales || 0));
 
   return (
@@ -28,15 +33,19 @@ export default function DashboardPage() {
       <div className="page-hd">
         <div className="page-title">
           <h1>Dashboard</h1>
-          <p>Welcome back, {user?.full_name || user?.username}. Here’s today at a glance.</p>
+          <p>Welcome back, {user?.full_name || user?.username}. Here’s your store at a glance.</p>
         </div>
       </div>
 
       <div className="stat-cards">
-        <Stat k="Today’s Sales" v={fmtMoney(today.grossSales ?? 0)} d={`${today.saleCount ?? 0} paid sale(s) today`} />
-        <Stat k="Transactions" v={today.saleCount ?? 0} d="POS sales today" tone="violet" />
-        <Stat k="Units Sold" v={today.units ?? 0} d="Quantity out today" tone="green" />
-        <Stat k="Net Sales" v={fmtMoney(today.netSales ?? 0)} d="After refunds" tone="amber" />
+        <Stat k="Gross Sales" v={fmtMoney(stats.grossSales ?? 0)} d={`${stats.totalSalesCount ?? 0} paid sale(s)`} />
+        <Stat k="Net Revenue" v={fmtMoney(stats.totalRevenue ?? 0)} d={`${fmtMoney(stats.refunds ?? 0)} refunded`} tone="green" />
+        <Stat k="Receivables (AR)" v={fmtMoney(stats.totalBalanceDue ?? 0)} d="Open invoices + layaways" tone="violet" />
+        <Stat k="Payables (AP)" v={fmtMoney(stats.totalPayable ?? 0)} d="Owed to suppliers" tone="amber" />
+        <Stat k="Cash in Drawer" v={fmtMoney(stats.cashTotal ?? 0)} d="Cash collected" tone="green" />
+        <Stat k="Mobile / EcoCash" v={fmtMoney(stats.ecoCashTotal ?? 0)} d="EcoCash and mobile money" tone="violet" />
+        <Stat k="Mobile Only" v={fmtMoney(stats.mobileTotal ?? 0)} d="Mobile money" tone="amber" />
+        <Stat k="Low Stock" v={stats.lowStockCount ?? 0} d="Items below reorder level" tone={stats.lowStockCount ? 'red' : 'green'} />
       </div>
 
       <div className="two-col">
@@ -45,9 +54,10 @@ export default function DashboardPage() {
           <div className="bars">
             {byDay.map((r) => {
               const val = r.sales || 0;
-              const h = Math.max(3, Math.round((val / maxRow) * 150));
+              const h = Math.max(3, Math.round((val / maxRow) * 140));
               return (
                 <div className="bar-col" key={r.day}>
+                  <div className="bar-val">{fmtMoney(val)}</div>
                   <div className="bar" style={{ height: h }} title={`${r.day}: ${fmtMoney(val)}`} />
                   <div className="bar-days">{String(r.day).slice(-2)}</div>
                 </div>

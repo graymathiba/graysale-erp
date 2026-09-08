@@ -21,13 +21,17 @@ const CAPABILITIES = {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => authStore.user);
+  const [tenant, setTenant] = useState(() => authStore.tenant);
   const [ready, setReady] = useState(!!authStore.token);
 
   useEffect(() => {
     if (authStore.token && !authStore.user) {
       fetchMe()
-        .then((u) => { setUser(u); authStore.set({ token: authStore.token, user: u }); })
-        .catch(() => { authStore.clear(); setUser(null); })
+        .then(({ user: u, tenant: t }) => {
+          setUser(u); setTenant(t);
+          authStore.set({ token: authStore.token, user: u, tenant: t });
+        })
+        .catch(() => { authStore.clear(); setUser(null); setTenant(null); })
         .finally(() => setReady(true));
     } else {
       setReady(true);
@@ -35,22 +39,38 @@ export function AuthProvider({ children }) {
 
     // Central HTTP client signals a stale/expired session (single-shot).
     // Nulling the user drops every protected route back to /login.
-    const onUnauthorized = () => { authStore.clear(); setUser(null); };
+    const onUnauthorized = () => { authStore.clear(); setUser(null); setTenant(null); };
     window.addEventListener('app:unauthorized', onUnauthorized);
     return () => window.removeEventListener('app:unauthorized', onUnauthorized);
   }, []);
 
   const login = useCallback(async (u, p) => {
-    const usr = await apiLogin(u, p);
+    const { user: usr, tenant: tnt } = await apiLogin(u, p);
     setUser(usr);
-    return usr;
+    setTenant(tnt);
+    return { user: usr, tenant: tnt };
   }, []);
 
   const logout = useCallback(async () => {
     try { await api.post('/auth/logout'); } catch { /* ignore */ }
     authStore.clear();
     setUser(null);
+    setTenant(null);
   }, []);
+
+  // Re-pull the authenticated identity + tenant from the backend. Used right
+  // after a license key is redeemed so the pending->active switch reflects
+  // immediately in the UI.
+  const refreshTenant = useCallback(async () => {
+    const { user: u, tenant: t } = await fetchMe();
+    setUser(u); setTenant(t);
+    authStore.set({ token: authStore.token, user: u, tenant: t });
+    return t;
+  }, []);
+
+  // PENDING_KEY / PENDING_ACTIVATION / BLOCKED tenants must activate (or
+  // renew) before the ERP opens; drives RequireActiveTenant.
+  const needsActivation = !!tenant && ['PENDING_KEY', 'PENDING_ACTIVATION', 'BLOCKED'].includes(tenant.status);
 
   // capability check, honoring the backend's '*' wildcard.
   const can = useCallback((cap) => {
@@ -63,9 +83,11 @@ export function AuthProvider({ children }) {
 
   const isAdmin = !!user && (user.role === 'owner' || user.role === 'manager');
   const isCashier = !!user && user.role === 'cashier';
+  // Global platform-admin flag surfaced by the backend (users.is_super_admin).
+  const isSuperAdmin = !!user && user.isSuperAdmin === true;
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, logout, can, isAdmin, isCashier, setUser }}>
+    <AuthContext.Provider value={{ user, tenant, ready, login, logout, can, isAdmin, isCashier, isSuperAdmin, needsActivation, refreshTenant, setUser, setTenant }}>
       {children}
     </AuthContext.Provider>
   );

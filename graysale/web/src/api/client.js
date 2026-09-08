@@ -6,18 +6,23 @@
 
 const tokenKey = 'gs_token';
 const userKey = 'gs_user';
+const tenantKey = 'gs_tenant';
 const SESSION_EXPIRED_MSG = 'Session expired. Please log in again.';
+const ACTIVATION_REQUIRED_MSG = 'Your GraySale license is not active. Activation required before continuing.';
 
 export const authStore = {
   get token() { return localStorage.getItem(tokenKey) || ''; },
   get user() { try { return JSON.parse(localStorage.getItem(userKey) || 'null'); } catch { return null; } },
+  get tenant() { try { return JSON.parse(localStorage.getItem(tenantKey) || 'null'); } catch { return null; } },
   set(data) {
     localStorage.setItem(tokenKey, data.token);
     localStorage.setItem(userKey, JSON.stringify(data.user));
+    if (data.tenant) localStorage.setItem(tenantKey, JSON.stringify(data.tenant));
     // A fresh valid session means past expiry notices must not replay.
     disarmAuthGuard();
+    disarmActivationGuard();
   },
-  clear() { localStorage.removeItem(tokenKey); localStorage.removeItem(userKey); },
+  clear() { localStorage.removeItem(tokenKey); localStorage.removeItem(userKey); localStorage.removeItem(tenantKey); },
 };
 
 export class ApiError extends Error {
@@ -35,6 +40,21 @@ export class ApiError extends Error {
 let authGuardArmed = false;
 
 export function disarmAuthGuard() { authGuardArmed = false; }
+
+// ---------- single-instance 402 (license required) guard ----------
+let activationGuardArmed = false;
+
+export function disarmActivationGuard() { activationGuardArmed = false; }
+
+// Fires the activation-required notice ONCE per session. Does not clear the
+// session (the user is authenticated, just not licensed yet).
+function handleActivationRequired() {
+  if (activationGuardArmed) return false;
+  activationGuardArmed = true;
+  raiseToast(ACTIVATION_REQUIRED_MSG, 'err');
+  window.dispatchEvent(new CustomEvent('app:activation-required'));
+  return true;
+}
 
 function raiseToast(msg, kind) {
   window.dispatchEvent(new CustomEvent('app:toast', { detail: { msg, kind } }));
@@ -75,6 +95,11 @@ async function request(method, path, body, { skipAuthGuard = false } = {}) {
     handleSessionExpired();
     throw new ApiError(msg, 401, data.code, { silent: true });
   }
+  if (res.status === 402 && !skipAuthGuard) {
+    // License gate: tenant exists but is not activated yet.
+    handleActivationRequired();
+    throw new ApiError(msg, 402, data.code, { silent: true });
+  }
   if (!res.ok) {
     throw new ApiError(msg, res.status, data.code);
   }
@@ -91,15 +116,15 @@ export const api = {
 export async function login(username, password) {
   const r = await api.post('/auth/login', { username, password });
   if (!r.ok) throw new ApiError(r.error || 'Login failed', 401);
-  authStore.set({ token: r.token, user: r.user });
-  return r.user;
+  authStore.set({ token: r.token, user: r.user, tenant: r.tenant });
+  return { user: r.user, tenant: r.tenant };
 }
 
 // Boot-time session validation. Errors here are handled silently by AuthContext
 // (no expiry toast on first paint — the user is simply sent to /login).
 export async function fetchMe() {
   const data = await api.get('/auth/me', { skipAuthGuard: true });
-  return data.user;
+  return data;
 }
 
 export function isHandledError(e) {

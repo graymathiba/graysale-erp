@@ -17,7 +17,12 @@ export default function LoginPage() {
     setErr('');
     setBusy(true);
     try {
-      const u = await login(username, password);
+      const { user: u, tenant } = await login(username, password);
+      if (tenant?.needsActivation) {
+        toast.ok(`Welcome, ${u.fullName || u.username}`);
+        navigate('/activate-license');
+        return;
+      }
       toast.ok(`Welcome, ${u.fullName || u.username}`);
       navigate(u.role === 'cashier' ? '/pos' : '/dashboard');
     } catch (ex) {

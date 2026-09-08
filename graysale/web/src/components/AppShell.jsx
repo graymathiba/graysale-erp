@@ -5,7 +5,7 @@ import { NAV_GROUPS, findNavItem } from '../lib/nav';
 import { initials } from '../lib/format';
 
 export default function AppShell() {
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -32,11 +32,11 @@ export default function AppShell() {
             <div className="side-group" key={g.title}>
               <div className="side-group-title">{g.title}</div>
               {g.items
-                .filter((it) => !it.cap || can(it.cap))
+                .filter((it) => !it.super ? (!it.cap || can(it.cap)) : isSuperAdmin)
                 .map((it) => (
                   <button
                     key={it.key}
-                    className={`side-item${location.pathname === it.route ? ' active' : ''}`}
+                    className={`side-item${location.pathname === it.route ? ' active' : ''}${it.super ? ' super-admin' : ''}`}
                     onClick={() => navigate(it.route)}
                     title={it.label}
                   >

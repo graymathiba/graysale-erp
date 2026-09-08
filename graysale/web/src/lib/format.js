@@ -44,6 +44,11 @@ export function statusBadge(status) {
     PAID: 'badge-green', OPEN: 'badge-amber', PARTIAL: 'badge-sky', COMPLETED: 'badge-green',
     VOID: 'badge-red', DRAFT: 'badge-gray', ORDERED: 'badge-sky', RECEIVED: 'badge-green',
     CONVERTED: 'badge-gray', ACTIVE: 'badge-green', INACTIVE: 'badge-gray',
+    // Control Tower tenant states
+    ACTIVE: 'badge-green', BLOCKED: 'badge-red', EXPIRED: 'badge-amber', PENDING_KEY: 'badge-violet',
+    PENDING_ACTIVATION: 'badge-violet',
+    // Control Tower key states
+    UNUSED: 'badge-blue', REDEEMED: 'badge-green', REVOKED: 'badge-gray',
   };
   const cls = map[status] || 'badge-gray';
   const label = status || '—';

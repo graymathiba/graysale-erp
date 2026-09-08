@@ -4,7 +4,8 @@ import { useToast } from '../components/Toast';
 import { api } from '../api/client';
 import Modal from '../components/Modal';
 import DataTable from '../components/DataTable';
-import { fmtMoney } from '../lib/format';
+import { fmtMoney, initials } from '../lib/format';
+import CategorySelector from '../components/CategorySelect';
 
 const TIER_NAMES = ['Wholesale', 'Member', 'Reseller'];
 const UOM_NAMES = ['each', 'box', 'case', 'kg', 'g', 'L', 'ml'];
@@ -39,8 +40,6 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false);
   const [batchForm, setBatchForm] = useState(null); // batch add modal
   const [newBatch, setNewBatch] = useState({ batchNo: '', manufactureDate: '', expiryDate: '', qtyOnHand: 0, location: '' });
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
 
   const load = useCallback(async (q, cid) => {
     setLoading(true);
@@ -65,52 +64,21 @@ export default function StockPage() {
   useEffect(() => { loadMeta(); load('', ''); }, [loadMeta, load]);
   useEffect(() => { const t = setTimeout(() => load(search, catId), 200); return () => clearTimeout(t); }, [search, catId, load]);
 
-  // Create a new category and refresh the category list. Returns created category or null.
+  // Create a new category, refresh the category list immediately so custom
+  // categories populate the filter, and return the created category.
   const createCategory = async (name) => {
     const n = (name || '').trim();
     if (!n) return null;
     try {
-      await api.post('/categories', { name: n });
-      // ensure latest categories are loaded
-      const res = await api.get('/categories');
-      const created = Array.isArray(res) ? res.find(c => c.name === n) : (res.categories || []).find(c => c.name === n);
-      // refresh local meta
-      await loadMeta();
-      return created || null;
+      const res = await api.post('/categories', { name: n });
+      const list = await api.get('/categories');
+      const arr = Array.isArray(list) ? list : list.categories || [];
+      setCats(arr);
+      const created = arr.find((c) => c.id === Number(res?.id)) || arr.find((c) => c.name.toLowerCase() === n.toLowerCase());
+      return created || { id: Number(res?.id), name: n };
     } catch (e) { toast.err(e.message); return null; }
   };
 
-  // Inline category selector with an "Add New Category" option.
-  function CategorySelector({ value, onChange, placeholder = 'All categories' }) {
-    if (isAddingCategory) {
-      return (
-        <div className="category-add inline" style={{ display: 'flex', gap: 8 }}>
-          <input placeholder="New category name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
-          <button className="btn btn-primary btn-sm" onClick={async () => {
-            const created = await createCategory(newCategoryName);
-            if (created) {
-              setNewCategoryName(''); setIsAddingCategory(false);
-              onChange && onChange(created.id);
-              setCatId(created.id);
-            }
-          }}>Save</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setIsAddingCategory(false); setNewCategoryName(''); }}>Cancel</button>
-        </div>
-      );
-    }
-
-    return (
-      <select value={value} onChange={(e) => {
-        const v = e.target.value;
-        if (v === '__add_new__') { setIsAddingCategory(true); setTimeout(() => { const el = document.querySelector('.category-add input'); if (el) el.focus(); }, 10); }
-        else { onChange && onChange(v); }
-      }}>
-        <option value="">{placeholder}</option>
-        {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        <option value="__add_new__">+ Add New Category...</option>
-      </select>
-    );
-  }
 
   const openNew = () => {
     if (!catId && cats.length) setForm({ ...emptyForm(), categoryId: cats[0].id });
@@ -191,6 +159,19 @@ export default function StockPage() {
     } catch (e) { if (e?.silent) return; toast.err(e.message); }
   };
 
+  const printBarcode = (product) => {
+    // Simple printable page with barcode text — replace with real barcode lib if available
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Barcode ${product.sku || product.id}</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;padding:20px} .code{font-size:28px;font-weight:700;}</style></head><body>
+      <div><div style="font-size:18px;font-weight:600">${product.name}</div>
+      <div class="code">${product.barcode || product.sku || product.id}</div>
+      <div style="margin-top:18px">Print this page to generate a barcode label.</div></div></body></html>`;
+    const w = window.open('', '_blank', 'width=320,height=240');
+    if (!w) return toast.warn('Pop-up blocked — allow pop-ups to print');
+    w.document.write(html); w.document.close(); setTimeout(() => { w.print(); w.close(); }, 300);
+  };
+
+
   const addBarcodeRow = () => {
     if (!newBarcode.barcode) { toast.warn('Enter a barcode'); return; }
     setForm({ ...form, barcodes: [...form.barcodes, { ...newBarcode, isPrimary: form.barcodes.length === 0 }] });
@@ -205,38 +186,59 @@ export default function StockPage() {
   };
 
   const columns = [
-    { key: 'name', label: 'Product', render: (r) => (
-      <div className="cd"><div className="cd-txt"><div className="cd-nm">{r.name}</div>
-        <div className="cd-sub">{r.sku} · {r.barcode || '—'}{r.brand ? ' · ' + r.brand : ''}{r.is_bundle ? ' · KIT' : ''}</div></div></div> ) },
+    { key: 'thumb', label: 'Image', width: 90, render: (r) => (
+      r.image_url
+        ? <div className="p-img"><img src={r.image_url} alt={r.name} /></div>
+        : <div className={`p-thumb${r.is_bundle ? ' kit' : ''}`}>{initials(r.name)}</div>
+    ) },
+    { key: 'name', label: 'Product & SKU', render: (r) => (
+      <div className="cd"><div className="cd-txt"><div className="cd-nm">{r.name}{r.is_bundle ? <span className="kit-tag">Kit</span> : null}</div>
+        <div className="cd-sub"><span className="mono">{r.sku || '—'}</span>{r.barcode ? ` · ${r.barcode}` : ''}{r.brand ? ` · ${r.brand}` : ''}</div></div></div> ) },
     { key: 'category', label: 'Category', render: (r) => <span className="muted">{r.category_name || '—'}</span> },
-    { key: 'price', label: 'Price', num: true, render: (r) => fmtMoney(r.price_cents) },
-    { key: 'tiers', label: 'Tiers', num: true, render: (r) => (r.tiers?.length ? `${r.tiers.length}` : '—') },
-    { key: 'bin', label: 'Bin', render: (r) => <span className="mono muted">{r.bin_location || '—'}</span> },
-    { key: 'stock', label: 'Stock', num: true, render: (r) => <span className={r.qty_on_hand <= (r.reorder_level || 0) ? 'danger' : ''}>{r.qty_on_hand}</span> },
-    { key: 'reorder', label: 'Reorder', num: true, render: (r) => r.reorder_level ?? '—' },
+    { key: 'price', label: 'Selling price', num: true, render: (r) => <span className="price">{fmtMoney(r.price_cents)}</span> },
+    { key: 'stock', label: 'On-hand stock', num: true, render: (r) => (
+      <div className="stock-cell">
+        <span className={r.qty_on_hand <= 0 ? 'stock-qty danger' : 'stock-qty'}>{r.qty_on_hand}</span>
+        {r.qty_on_hand <= 0 ? <span className="badge badge-red">Out of stock</span> : r.qty_on_hand <= (r.reorder_level || 0) ? <span className="badge badge-amber">Low</span> : null}
+      </div>
+    ) },
     { key: 'actions', label: 'Actions', render: (r) => (
       <div className="row-actions">
         {can('catalog.manage') && <button className="btn-link" onClick={() => openEdit(r)}>Edit</button>}
+        {can('catalog.manage') && <button className="btn-link danger" onClick={async () => { if (!window.confirm(`Deactivate ${r.name}?`)) return; try { await api.del(`/products/${r.id}`); toast.ok('Product deactivated'); load(search, catId); } catch (e) { if (e?.silent) return; toast.err(e.message); } }}>Delete</button>}
+        <button className="btn-link" onClick={() => printBarcode(r)}>Barcode</button>
         {can('inventory.adjust') && <button className="btn-link" onClick={() => { setAdjusting({ ...r, productId: r.id }); setAdjustForm({ qty: 0, type: 'ADJUST', note: '' }); }}>Adjust</button>}
         {can('inventory.adjust') && r.serial_tracked && <button className="btn-link" onClick={() => { setBatchForm(r); setNewBatch({ batchNo: '', manufactureDate: '', expiryDate: '', qtyOnHand: 0, location: r.bin_location || '' }); }}>Batch</button>}
-        {can('catalog.manage') && <button className="btn-link danger" onClick={async () => { if (!window.confirm(`Deactivate ${r.name}?`)) return; try { await api.del(`/products/${r.id}`); toast.ok('Product deactivated'); load(search, catId); } catch (e) { if (e?.silent) return; toast.err(e.message); } }}>Remove</button>}
       </div>
     ) },
   ];
+
+  const activeCount = rows.filter((r) => r.active).length;
+  const oosCount = rows.filter((r) => (r.qty_on_hand ?? 0) <= 0).length;
+  const kitCount = rows.filter((r) => r.is_bundle).length;
 
   return (
     <div className="page">
       <div className="page-hd">
         <div className="page-title"><h1>Stock &amp; Products</h1><p>Industry-grade catalog, pricing, batches and units.</p></div>
-        <button className="btn btn-primary" onClick={openNew} disabled={!can('catalog.manage')}>+ New product</button>
       </div>
       <div className="toolbar">
+        <button className="btn btn-primary" onClick={openNew} disabled={!can('catalog.manage')}>+ New product</button>
         <input className="search-input" placeholder="Search name / SKU / barcode / brand / part #…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <CategorySelector value={catId} onChange={(v) => setCatId(v)} placeholder="All categories" />
+        <CategorySelector value={catId} categories={cats} onChange={(v) => setCatId(v)} onAddCategory={createCategory} placeholder="All categories" canAdd={can('catalog.manage')} />
       </div>
       {loading ? <div className="loader"><span className="spinner" />Loading catalog…</div> : (
         <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} empty="No products match."
-          caption={<div className="table-capt"><span className="tc-count">{rows.length} items</span><span className="tc-note">Kit = bundle</span></div>} />
+          caption={
+            <div className="stock-overview">
+              <div className="so-count"><span className="so-num">{rows.length}</span><span className="so-lbl">{rows.length === 1 ? 'product' : 'products'}</span></div>
+              <div className="so-badges">
+                <span className="badge badge-green">{activeCount} active</span>
+                <span className={`badge ${oosCount ? 'badge-red' : 'badge-gray'}`}>{oosCount} out of stock</span>
+                {kitCount > 0 && <span className="badge badge-violet">{kitCount} kit{kitCount === 1 ? '' : 's'}</span>}
+              </div>
+            </div>
+          } />
       )}
 
       {/* ============ create / edit modal ============ */}
@@ -258,7 +260,7 @@ export default function StockPage() {
               <>
                 <div className="field"><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div className="field"><label>SKU *</label><input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} disabled={!!editing?.id} /></div>
-                <div className="field"><label>Category</label><CategorySelector value={form.categoryId} onChange={(v) => setForm({ ...form, categoryId: v })} placeholder="None" /></div>
+                <div className="field"><label>Category</label><CategorySelector value={form.categoryId} categories={cats} onChange={(v) => setForm({ ...form, categoryId: v })} onAddCategory={createCategory} placeholder="None" canAdd={can('catalog.manage')} /></div>
                 <div className="field"><label>Brand / Manufacturer</label><input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></div>
                 <div className="field"><label>Description</label><textarea rows="3" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
                 <div className="field"><label>Base unit</label>

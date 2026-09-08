@@ -20,9 +20,12 @@ export const NAV_GROUPS = [
   {
     title: 'Others',
     items: [
+      { key: 'company-profile', label: 'My Profile', route: '/company-profile', cap: 'settings.manage' },
+      { key: 'company', label: 'Company Profile', route: '/company', cap: 'settings.manage' },
       { key: 'settings', label: 'Settings', route: '/settings', cap: 'settings.manage' },
       { key: 'users', label: 'User Management', route: '/users', cap: 'users.manage' },
       { key: 'support', label: 'Support', route: '/support' },
+      { key: 'control-tower', label: 'Control Tower', route: '/admin/control-tower', super: true },
     ],
   },
 ];
@@ -40,7 +43,10 @@ export function findNavItem(route) {
 export function routeAllowed(route, can) {
   for (const g of NAV_GROUPS) {
     const it = g.items.find((i) => i.route === route);
-    if (it) return !it.cap || can(it.cap);
+    if (it) {
+      if (it.super) return true; // super routes are further gated in the router
+      return !it.cap || can(it.cap);
+    }
   }
   return true;
 }
