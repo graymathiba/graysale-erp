@@ -1,7 +1,9 @@
 import { tx, nextDoc } from '../db/database.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { todayLocal } from '../lib/ids.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
+const CASH_LIKE = ['CASH', 'CARD', 'MOBILE', 'ECOCASH', 'BANK'];
 const cashTarget = (method) => (method === 'CASH' ? '1000' : '1010');
 
 export class PaymentsService {
@@ -24,7 +26,8 @@ export class PaymentsService {
 
   // Money in. allocations: [{ invoiceId, amountCents }] -> ar_invoices.
   receivePayment({ customerId, method, amount, allocations = [], reference, date, note, user }) {
-    if (!['CASH', 'CARD', 'MOBILE', 'BANK'].includes(method)) throw badRequest('METHOD_MUST_BE_CASH_LIKE');
+    if (!CASH_LIKE.includes(method)) throw badRequest('METHOD_MUST_BE_CASH_LIKE');
+    const tenant = resolveTenantId(this.db, user?.tenantId);
     const amountCents = Math.round(Number(amount));
     if (amountCents <= 0) throw badRequest('AMOUNT_REQUIRED');
     const allocs = allocations.map(a => ({ ...a, amountCents: Math.round(Number(a.amountCents)) }));
@@ -37,9 +40,9 @@ export class PaymentsService {
     return tx(this.db, () => {
       const docNo = nextDoc(this.db, 'PYMT');
       const { lastInsertRowid } = this.db.prepare(`
-        INSERT INTO payments (doc_no, kind, party_type, party_id, method, amount_cents, reference, date, user_id, note)
-        VALUES (?, 'RECEIPT', 'CUSTOMER', ?, ?, ?, ?, ?, ?, ?)
-      `).run(docNo, customerId, method, amountCents, reference ?? null, date ?? todayLocal(), user?.id ?? null, note ?? '');
+        INSERT INTO payments (doc_no, kind, party_type, party_id, method, amount_cents, reference, date, user_id, note, tenant_id)
+        VALUES (?, 'RECEIPT', 'CUSTOMER', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(docNo, customerId, method, amountCents, reference ?? null, date ?? todayLocal(), user?.id ?? null, note ?? '', tenant);
 
       const insAlloc = this.db.prepare(
         'INSERT INTO payment_allocations (payment_id, invoice_type, invoice_id, amount_cents) VALUES (?, ?, ?, ?)'
@@ -87,7 +90,8 @@ export class PaymentsService {
 
   // Money out to suppliers. allocations: [{ billId, amountCents }].
   paySupplier({ supplierId, method, amount, allocations = [], reference, date, note, user }) {
-    if (!['CASH', 'CARD', 'MOBILE', 'BANK'].includes(method)) throw badRequest('METHOD_MUST_BE_CASH_LIKE');
+    if (!CASH_LIKE.includes(method)) throw badRequest('METHOD_MUST_BE_CASH_LIKE');
+    const tenant = resolveTenantId(this.db, user?.tenantId);
     const amountCents = Math.round(Number(amount));
     if (amountCents <= 0) throw badRequest('AMOUNT_REQUIRED');
     const allocs = allocations.map(a => ({ ...a, amountCents: Math.round(Number(a.amountCents)) }));
@@ -98,9 +102,9 @@ export class PaymentsService {
     return tx(this.db, () => {
       const docNo = nextDoc(this.db, 'PYMT');
       const { lastInsertRowid } = this.db.prepare(`
-        INSERT INTO payments (doc_no, kind, party_type, party_id, method, amount_cents, reference, date, user_id, note)
-        VALUES (?, 'EXPENSE', 'SUPPLIER', ?, ?, ?, ?, ?, ?, ?)
-      `).run(docNo, supplierId, method, amountCents, reference ?? null, date ?? todayLocal(), user?.id ?? null, note ?? '');
+        INSERT INTO payments (doc_no, kind, party_type, party_id, method, amount_cents, reference, date, user_id, note, tenant_id)
+        VALUES (?, 'EXPENSE', 'SUPPLIER', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(docNo, supplierId, method, amountCents, reference ?? null, date ?? todayLocal(), user?.id ?? null, note ?? '', tenant);
 
       const insAlloc = this.db.prepare(
         'INSERT INTO payment_allocations (payment_id, invoice_type, invoice_id, amount_cents) VALUES (?, ?, ?, ?)'
@@ -136,15 +140,17 @@ export class PaymentsService {
     });
   }
 
-  getPayment(id) {
-    const p = this.db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+  getPayment(id, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const p = this.db.prepare('SELECT * FROM payments WHERE id = ? AND tenant_id = ?').get(id, tenant);
     if (!p) throw notFound('PAYMENT_NOT_FOUND');
     p.allocations = this.db.prepare('SELECT * FROM payment_allocations WHERE payment_id = ?').all(id);
     return p;
   }
 
-  listPayments({ kind, partyType, partyId, limit = 100 } = {}) {
-    const where = ['1=1']; const vals = [];
+  listPayments({ kind, partyType, partyId, tenantId, limit = 100 } = {}) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const where = ['tenant_id = ?']; const vals = [tenant];
     if (kind) { where.push('kind = ?'); vals.push(kind); }
     if (partyType) { where.push('party_type = ?'); vals.push(partyType); }
     if (partyId) { where.push('party_id = ?'); vals.push(partyId); }

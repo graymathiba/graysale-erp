@@ -1,5 +1,6 @@
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { tx } from '../db/database.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 const productRow = `
 SELECT p.*, c.name AS category_name, t.name AS tax_class_name, t.rate_bps AS tax_rate_bps,
@@ -16,9 +17,10 @@ export class CatalogService {
   }
 
   // ---------- products ----------
-  listProducts({ search, includeInactive = false, categoryId, lowOnly = false } = {}) {
-    const where = [];
-    const vals = [];
+  listProducts({ search, includeInactive = false, categoryId, lowOnly = false, tenantId } = {}) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const where = ['p.tenant_id = ?'];
+    const vals = [tenant];
     if (!includeInactive) { where.push('p.active = 1'); }
     if (categoryId) { where.push('p.category_id = ?'); vals.push(categoryId); }
     if (search) {
@@ -28,7 +30,7 @@ export class CatalogService {
     if (lowOnly) {
       where.push('(COALESCE(s.qty_on_hand,0) - COALESCE(s.qty_reserved,0)) <= p.reorder_level');
     }
-    const sql = `${productRow} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.name`;
+    const sql = `${productRow} WHERE ${where.join(' AND ')} ORDER BY p.name`;
     const rows = this.db.prepare(sql).all(...vals);
     // Attach tiered prices, barcodes, batch summary, UOM, bundle flag
     for (const p of rows) {
@@ -41,8 +43,9 @@ export class CatalogService {
     return rows;
   }
 
-  getProduct(id) {
-    const p = this.db.prepare(`${productRow} WHERE p.id = ?`).get(id);
+  getProduct(id, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const p = this.db.prepare(`${productRow} WHERE p.id = ? AND p.tenant_id = ?`).get(Number(id), tenant);
     if (!p) throw notFound('PRODUCT_NOT_FOUND');
     p.tiers = this.priceTiers(id);
     p.barcodes = this.barcodes(id);
@@ -53,26 +56,29 @@ export class CatalogService {
     return p;
   }
 
-  findByBarcode(barcode) {
-    const p = this.db.prepare(`${productRow} WHERE p.barcode = ? AND p.active = 1`).get(barcode);
+  findByBarcode(barcode, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const p = this.db.prepare(`${productRow} WHERE p.barcode = ? AND p.active = 1 AND p.tenant_id = ?`).get(barcode, tenant);
     if (p) return p;
     // Fall back to product_barcodes table
-    const pb = this.db.prepare('SELECT product_id FROM product_barcodes WHERE barcode = ? AND active = 1').get(barcode);
-    return pb ? this.db.prepare(`${productRow} WHERE p.id = ?`).get(pb.product_id) : null;
+    const pb = this.db.prepare('SELECT pb.product_id FROM product_barcodes pb JOIN products p ON p.id = pb.product_id WHERE pb.barcode = ? AND pb.active = 1 AND p.tenant_id = ?').get(barcode, tenant);
+    return pb ? this.db.prepare(`${productRow} WHERE p.id = ? AND p.tenant_id = ?`).get(pb.product_id, tenant) : null;
   }
 
-  findBySku(sku) {
-    const p = this.db.prepare(`${productRow} WHERE p.sku = ? AND p.active = 1`).get(sku);
+  findBySku(sku, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const p = this.db.prepare(`${productRow} WHERE p.sku = ? AND p.active = 1 AND p.tenant_id = ?`).get(sku, tenant);
     return p || null;
   }
 
-  resolveProduct(ref) {
+  resolveProduct(ref, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
     let p = null;
     if (Number.isInteger(ref) || /^\d+$/.test(String(ref))) {
-      p = this.db.prepare(`${productRow} WHERE p.id = ?`).get(Number(ref));
+      p = this.db.prepare(`${productRow} WHERE p.id = ? AND p.tenant_id = ?`).get(Number(ref), tenant);
     }
     if (!p) {
-      p = this.findByBarcode(String(ref).trim()) || this.findBySku(String(ref).trim());
+      p = this.findByBarcode(String(ref).trim(), tenant) || this.findBySku(String(ref).trim(), tenant);
     }
     if (!p) throw notFound(`PRODUCT_NOT_FOUND: ${ref}`);
     p.tiers = this.priceTiers(p.id);
@@ -98,19 +104,20 @@ export class CatalogService {
     return product.price_cents;
   }
 
-  createProduct(body) {
+  createProduct(body, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
     if (!body.name) throw badRequest('PRODUCT_NAME_REQUIRED');
     if (!body.sku) throw badRequest('SKU_REQUIRED');
-    if (this.db.prepare('SELECT id FROM products WHERE sku = ?').get(body.sku)) throw conflict(`SKU_EXISTS: ${body.sku}`);
-    if (body.barcode && this.db.prepare('SELECT id FROM products WHERE barcode = ?').get(body.barcode)) {
+    if (this.db.prepare('SELECT id FROM products WHERE sku = ? AND tenant_id = ?').get(body.sku, tenant)) throw conflict(`SKU_EXISTS: ${body.sku}`);
+    if (body.barcode && this.db.prepare('SELECT id FROM products WHERE barcode = ? AND tenant_id = ?').get(body.barcode, tenant)) {
       throw conflict(`BARCODE_EXISTS: ${body.barcode}`);
     }
     const info = tx(this.db, () => {
       const info = this.db.prepare(`
         INSERT INTO products (sku, barcode, name, category_id, unit, cost_cents, price_cents, tax_class_id,
           reorder_level, serial_tracked, description, brand, manufacturer_part_no, hs_code, bin_location,
-          min_stock, max_stock, lead_time_days, warranty_days, weight_grams, length_mm, width_mm, height_mm)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          min_stock, max_stock, lead_time_days, warranty_days, weight_grams, length_mm, width_mm, height_mm, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         body.sku, body.barcode || null, body.name, body.categoryId ?? null, body.unit || 'each',
         Math.round(Number(body.costCents ?? body.cost ?? 0)),
@@ -123,7 +130,7 @@ export class CatalogService {
         Math.round(Number(body.leadTimeDays ?? 0)), Math.round(Number(body.warrantyDays ?? 0)),
         Math.round(Number(body.weightGrams ?? 0)),
         Math.round(Number(body.lengthMm ?? 0)), Math.round(Number(body.widthMm ?? 0)),
-        Math.round(Number(body.heightMm ?? 0))
+        Math.round(Number(body.heightMm ?? 0)), tenant
       );
       const pid = info.lastInsertRowid;
       this.db.prepare('INSERT INTO product_stock (product_id, qty_on_hand, qty_reserved) VALUES (?, 0, 0)').run(pid);
@@ -154,10 +161,11 @@ export class CatalogService {
       this.auth.audit(body.userId, body.username, 'PRODUCT_CREATE', 'product', pid, body.name);
       return pid;
     });
-    return this.getProduct(info);
+    return this.getProduct(info, tenant);
   }
 
-  updateProduct(id, body) {
+  updateProduct(id, body, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
     const sets = [];
     const vals = [];
     const map = {
@@ -175,8 +183,8 @@ export class CatalogService {
     }
     if (!sets.length && !Array.isArray(body.tiers) && !Array.isArray(body.barcodes) && !Array.isArray(body.uom) && !Array.isArray(body.bundleComponents)) return;
     if (sets.length) {
-      vals.push(Number(id));
-      this.db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+      vals.push(Number(id), tenant);
+      this.db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...vals);
     }
     // Replace tiered prices
     if (Array.isArray(body.tiers)) {
@@ -214,13 +222,14 @@ export class CatalogService {
         }
       }
     }
-    return this.getProduct(id);
+    return this.getProduct(id, tenant);
   }
 
   // ---------- stock movements ----------
-  move({ productId, qty, type, refType, refId, note, userId, batchNo }) {
+  move({ productId, qty, type, refType, refId, note, userId, batchNo, tenantId }) {
     if (!Number.isInteger(qty) || qty === 0) throw badRequest('QTY_MUST_BE_NONZERO_INTEGER');
-    const exists = this.db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+    const tenant = resolveTenantId(this.db, tenantId);
+    const exists = this.db.prepare('SELECT id FROM products WHERE id = ? AND tenant_id = ?').get(productId, tenant);
     if (!exists) throw notFound('PRODUCT_NOT_FOUND');
     return tx(this.db, () => {
       this.db.prepare(`
@@ -428,21 +437,23 @@ export class CatalogService {
     }));
   }
 
-  deleteProduct(id) {
-    this.getProduct(id); // throws 404 if missing
+  deleteProduct(id, tenantId) {
+    this.getProduct(id, tenantId); // throws 404 if missing or out of scope
     this.db.prepare('UPDATE products SET active = 0 WHERE id = ?').run(Number(id));
     return { ok: true };
   }
 
   // ---------- categories & tax ----------
-  categories() {
-    return this.db.prepare('SELECT * FROM product_categories ORDER BY name').all();
+  categories(tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    return this.db.prepare('SELECT * FROM product_categories WHERE tenant_id = ? ORDER BY name').all(tenant);
   }
 
-  createCategory(name) {
+  createCategory(name, tenantId) {
     if (!name) throw badRequest('CATEGORY_NAME_REQUIRED');
+    const tenant = resolveTenantId(this.db, tenantId);
     try {
-      return this.db.prepare('INSERT INTO product_categories (name) VALUES (?)').run(name).lastInsertRowid;
+      return this.db.prepare('INSERT INTO product_categories (name, tenant_id) VALUES (?, ?)').run(name, tenant).lastInsertRowid;
     } catch (e) {
       if (e.code === 'ERR_SQLITE_ERROR' && String(e.message).includes('UNIQUE')) throw conflict(`CATEGORY_EXISTS: ${name}`);
       throw e;

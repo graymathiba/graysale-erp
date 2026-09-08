@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { unauthorized, forbidden } from '../lib/errors.js';
 import { tx } from '../db/database.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
 // Role -> permission matrix.
 const PERMISSIONS = {
@@ -54,11 +55,12 @@ export class AuthService {
   }
 
   addDefaultAdmin() {
+    const tenantId = resolveTenantId(this.db);
     const has = this.db.prepare("SELECT id FROM users WHERE role = 'owner' LIMIT 1").get();
     if (!has) {
       this.db.prepare(
-        'INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)'
-      ).run('admin', hashPassword('admin123'), 'System Administrator', 'owner');
+        'INSERT INTO users (username, password_hash, full_name, role, tenant_id) VALUES (?, ?, ?, ?, ?)'
+      ).run('admin', hashPassword('admin123'), 'System Administrator', 'owner', tenantId);
     }
   }
 
@@ -66,23 +68,26 @@ export class AuthService {
     this.addDefaultAdmin();
   }
 
-  createUser({ username, password, fullName, role, locationId }) {
+  createUser({ username, password, fullName, role, locationId, tenantId }) {
+    const tenant = resolveTenantId(this.db, tenantId);
     const existing = this.db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) throw new Error(`DUPLICATE_USERNAME: ${username}`);
     if (!PERMISSIONS[role]) throw new Error(`INVALID_ROLE: ${role}`);
     const info = this.db.prepare(
-      'INSERT INTO users (username, password_hash, full_name, role, location_id) VALUES (?, ?, ?, ?, ?)'
-    ).run(username, hashPassword(password), fullName || username, role, locationId ?? null);
+      'INSERT INTO users (username, password_hash, full_name, role, location_id, tenant_id) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(username, hashPassword(password), fullName || username, role, locationId ?? null, tenant);
     return info.lastInsertRowid;
   }
 
-  listUsers() {
+  listUsers(tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
     return this.db.prepare(
-      'SELECT id, username, full_name, role, location_id, active, created_at FROM users ORDER BY id'
-    ).all();
+      'SELECT id, username, full_name, role, location_id, active, tenant_id, created_at FROM users WHERE tenant_id = ? ORDER BY id'
+    ).all(tenant);
   }
 
-  updateUser(id, fields) {
+  updateUser(id, fields, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
     const sets = [];
     const vals = [];
     if (fields.role != null) {
@@ -94,23 +99,25 @@ export class AuthService {
     if (fields.locationId !== undefined) { sets.push('location_id = ?'); vals.push(fields.locationId); }
     if (fields.password != null) { sets.push('password_hash = ?'); vals.push(hashPassword(fields.password)); }
     if (!sets.length) return;
-    vals.push(Number(id));
-    this.db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+    vals.push(Number(id), tenant);
+    this.db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...vals);
   }
 
   // Soft-delete (deactivate): prevents login but preserves records/shift history.
-  deactivateUser(id, actor) {
-    const u = this.db.prepare('SELECT * FROM users WHERE id = ?').get(Number(id));
+  deactivateUser(id, actor, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const u = this.db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(Number(id), tenant);
     if (!u) throw new Error('USER_NOT_FOUND');
     if (u.role === 'owner' && u.id !== actor?.id) throw new Error('CANNOT_DEACTIVATE_OWNER');
-    this.db.prepare('UPDATE users SET active = 0 WHERE id = ?').run(Number(id));
+    this.db.prepare('UPDATE users SET active = 0 WHERE id = ? AND tenant_id = ?').run(Number(id), tenant);
     return this.db.prepare('SELECT id, username, full_name, role, active FROM users WHERE id = ?').get(Number(id));
   }
 
-  reactivateUser(id, actor) {
-    const u = this.db.prepare('SELECT * FROM users WHERE id = ?').get(Number(id));
+  reactivateUser(id, actor, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const u = this.db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(Number(id), tenant);
     if (!u) throw new Error('USER_NOT_FOUND');
-    this.db.prepare('UPDATE users SET active = 1 WHERE id = ?').run(Number(id));
+    this.db.prepare('UPDATE users SET active = 1 WHERE id = ? AND tenant_id = ?').run(Number(id), tenant);
     return this.db.prepare('SELECT id, username, full_name, role, active FROM users WHERE id = ?').get(Number(id));
   }
 
@@ -124,8 +131,9 @@ export class AuthService {
     return shift && shift.txn > 0 ? shift : null;
   }
 
-  deleteUser(id, actor) {
-    const u = this.db.prepare('SELECT * FROM users WHERE id = ?').get(Number(id));
+  deleteUser(id, actor, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const u = this.db.prepare('SELECT * FROM users WHERE id = ? AND tenant_id = ?').get(Number(id), tenant);
     if (!u) throw new Error('USER_NOT_FOUND');
     if (u.role === 'owner' && u.id !== actor?.id) throw new Error('CANNOT_DELETE_OWNER');
     // Never delete the currently signed-in owner.
@@ -143,13 +151,14 @@ export class AuthService {
       this.db.prepare('UPDATE payments SET user_id = NULL WHERE user_id = ?').run(u.id);
       this.db.prepare('UPDATE journal_entries SET user_id = NULL WHERE user_id = ?').run(u.id);
       this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
-      this.db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+      this.db.prepare('DELETE FROM users WHERE id = ? AND tenant_id = ?').run(u.id, tenant);
       return { ok: true, username: u.username };
     });
   }
 
-  get(id) {
-    return this.db.prepare('SELECT id, username, full_name, role, active FROM users WHERE id = ?').get(Number(id));
+  get(id, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    return this.db.prepare('SELECT id, username, full_name, role, active, tenant_id FROM users WHERE id = ? AND tenant_id = ?').get(Number(id), tenant);
   }
 
   login({ username, password }) {
@@ -159,12 +168,17 @@ export class AuthService {
     if (!user || !verifyPassword(password, user.password_hash)) {
       return { ok: false, error: 'INVALID_CREDENTIALS' };
     }
+    // Backfill tenant binding for legacy accounts created pre-v8.
+    if (!user.tenant_id) {
+      user.tenant_id = resolveTenantId(this.db);
+      this.db.prepare('UPDATE users SET tenant_id = ? WHERE id = ?').run(user.tenant_id, user.id);
+    }
     const t = randomBytes(24).toString('hex');
     const expires = new Date(Date.now() + SESSION_TTL_HOURS * 3600_000).toISOString();
     this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
     this.db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(t, user.id, expires);
     this.audit(user.id, user.username, 'LOGIN', 'user', user.id, '');
-    return { ok: true, token: t, user: this.publicUser(user) };
+    return { ok: true, token: t, user: this.publicUser(user), tenant: this.tenantForUser(user) };
   }
 
   logout(token) {
@@ -172,7 +186,24 @@ export class AuthService {
   }
 
   publicUser(u) {
-    return { id: u.id, username: u.username, fullName: u.full_name, role: u.role, locationId: u.location_id };
+    return { id: u.id, username: u.username, fullName: u.full_name, role: u.role, locationId: u.location_id, isSuperAdmin: !!u.is_super_admin, tenantId: u.tenant_id || null };
+  }
+
+  tenantForUser(user) {
+    if (!user) return null;
+    const row = this.db.prepare('SELECT id, company_name, owner_email, status, license_key, license_expires_at FROM tenants WHERE id = ?').get(user.tenant_id || user.tenantId || resolveTenantId(this.db));
+    if (!row) return null;
+    return { ...row, needsActivation: !!(row.status === 'PENDING_KEY' || row.status === 'PENDING_ACTIVATION') };
+  }
+
+  isSuperAdmin(user) {
+    return !!user && !!(user.is_super_admin || user.isSuperAdmin);
+  }
+
+  // Strict Control Tower gate used by the super-admin route group.
+  requireSuperAdmin(user) {
+    if (!this.isSuperAdmin(user)) throw forbidden();
+    return user;
   }
 
   userForToken(token) {

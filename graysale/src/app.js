@@ -10,6 +10,8 @@ import { PurchasingService } from './services/purchasing.js';
 import { BanksService } from './services/banks.js';
 import { EodService } from './services/eod.js';
 import { ReportingService } from './services/reporting.js';
+import { CompanySettingsService } from './services/companySettings.js';
+import { TenantProfileService } from './services/tenantProfile.js';
 
 export function createServices(db) {
   const auth = new AuthService(db);
@@ -24,7 +26,9 @@ export function createServices(db) {
   const banks = new BanksService(db);
   const eod = new EodService(db);
   const reports = new ReportingService(db);
-  return { db, auth, catalog, customers, suppliers, accounting, invoicing, pos, payments, purchasing, banks, eod, reports };
+  const companySettings = new CompanySettingsService(db);
+  const tenantProfile = new TenantProfileService(db, auth);
+  return { db, auth, catalog, customers, suppliers, accounting, invoicing, pos, payments, purchasing, banks, eod, reports, companySettings, tenantProfile };
 }
 
 export function createApp({ dbPath } = {}) {

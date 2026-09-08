@@ -102,6 +102,67 @@ function closeModal() {
 }
 function escHandler(e) { if (e.key === 'Escape') closeModal(); }
 
+// ---------- customizable category modal helper ----------
+// options: { title, placeholder, defaultName, autoSelect (bool), extraFieldsHtml, onCreate }
+async function openCategoryModal(options = {}) {
+  const opts = Object.assign({ title: 'Add category', placeholder: '', defaultName: '', autoSelect: true, extraFieldsHtml: '', onCreate: null }, options);
+  modal({
+    title: opts.title,
+    body: `<div class="field"><label>Category name</label><input id="new-cat-name" autofocus placeholder="${esc(opts.placeholder)}" value="${esc(opts.defaultName)}"></div>${opts.extraFieldsHtml}`,
+    footer: `<button class="btn" onclick="closeModal()">Cancel</button>
+             <button class="btn btn-primary" id="new-cat-save">Create</button>`,
+    onMount: (bd) => {
+      $('#new-cat-save').onclick = async () => {
+        const name = $('#new-cat-name').value.trim();
+        if (!name) return toast('Enter a name', 'warn');
+        try {
+          const created = await post('/categories', { name });
+          await loadCatalog();
+          // update any visible category select named p-cat
+          const sel = $('#p-cat');
+          if (sel) {
+            sel.innerHTML = '<option value="">— None —</option>' + CATALOG.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+            if (opts.autoSelect) {
+              // prefer returned id, fallback to matching name
+              const id = created?.id || (CATALOG.categories.find(c => c.name === name) || {}).id;
+              if (id) {
+                sel.value = id;
+                sel.dispatchEvent(new Event('change'));
+              }
+            }
+          }
+          if (typeof opts.onCreate === 'function') {
+            try { opts.onCreate(created); } catch (_) {}
+          }
+          toast('Category added', 'ok');
+          closeModal();
+        } catch (e) { toast(e.message, 'err'); }
+      };
+    },
+  });
+}
+
+function updateCategoryDisplays() {
+  try {
+    // Update all selects that opt into category updates
+    $$('.cat-select').forEach(sel => {
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— None —</option>' + CATALOG.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('') + `<option value="__add_new__" class="font-semibold">+ Add New Category...</option>`;
+      if (cur) sel.value = cur;
+    });
+
+    // Update POS category buttons if present
+    $$('.pos-cats').forEach(pc => {
+      pc.innerHTML = `<button class="pos-cat-btn ${posCategory === 'all' ? 'active' : ''}" data-cat="all">All</button>` + CATALOG.categories.map(c => `<button class="pos-cat-btn ${posCategory == c.id ? 'active' : ''}" data-cat="${c.id}">${esc(c.name)}</button>`).join('');
+      $$('.pos-cat-btn', pc).forEach(b => b.onclick = () => { posCategory = b.dataset.cat; if (RM_VIEWS.pos && typeof RM_VIEWS.pos.render === 'function') RM_VIEWS.pos.render($('#content')); });
+    });
+
+    // Trigger change on product category select if present
+    const pc = $('#p-cat'); if (pc) pc.dispatchEvent(new Event('change'));
+  } catch (e) { /* ignore UI update errors */ }
+}
+
+
 // ---------- login ----------
 async function doLogin(u, p) {
   const r = await post('/auth/login', { username: u, password: p });
@@ -255,6 +316,7 @@ async function loadCatalog() {
   CATALOG.products = await get('/products');
   CATALOG.categories = await get('/categories');
   CATALOG.customers = await get('/customers');
+  try { updateCategoryDisplays(); } catch (_) {}
 }
 
 function computeTotals() {
@@ -695,8 +757,7 @@ async function productForm(prod) {
         <div class="field"><label>Reorder level</label><input id="p-reorder" type="number" value="${prod?.reorder_level || 0}"></div>
       </div>
       <div class="fields-3">
-        <div class="field"><label>Category</label><div style="display:flex;gap:8px;align-items:center"><select id="p-cat"><option value="">— None —</option>
-          ${CATALOG.categories.map(c => `<option value="${c.id}"${prod?.category_id == c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" id="p-cat-add">+ Add</button></div></div>
+        <div class="field"><label>Category</label><div style="display:flex;gap:8px;align-items:center"><select id="p-cat" class="cat-select"><option value="">— None —</option>${CATALOG.categories.map(c => `<option value="${c.id}"${prod?.category_id == c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}<option value="__add_new__" class="font-semibold">+ Add New Category...</option></select><button class="btn btn-ghost btn-sm" id="p-cat-add">+ Add</button></div></div>
         <div class="field"><label>Unit</label><input id="p-unit" value="${esc(prod?.unit || 'each')}"></div>
         <div class="field"><label>Tax class</label><select id="p-tax">
           ${(await get('/tax-classes')).map(t => `<option value="${t.id}" ${(!prod || prod.tax_class_id == t.id) ? 'selected' : ''}>${esc(t.name)} (${(t.rate_bps / 100).toFixed(2)}%)</option>`).join('')}
@@ -721,17 +782,15 @@ async function productForm(prod) {
         } catch (e) { toast(e.message, 'err'); }
       };
 
-      // inline add category button
-      $('#p-cat-add').onclick = async () => {
-        const name = prompt('New category name');
-        if (!name) return;
-        try {
-          await post('/categories', { name });
-          await loadCatalog();
-          const sel = $('#p-cat');
-          sel.innerHTML = '<option value="">— None —</option>' + CATALOG.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-          toast('Category added', 'ok');
-        } catch (e) { toast(e.message, 'err'); }
+      // inline add category button — open the customizable category modal
+      $('#p-cat-add').onclick = async () => openCategoryModal({ autoSelect: true, placeholder: 'e.g. Beverages' });
+
+      // also allow selecting the special "__add_new__" option in the select to open the modal
+      $('#p-cat').onchange = (e) => {
+        if (e.target.value === '__add_new__') {
+          e.target.value = '';
+          openCategoryModal({ autoSelect: true, placeholder: 'e.g. Beverages' });
+        }
       };
     },
   });

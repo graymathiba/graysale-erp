@@ -1,8 +1,9 @@
 import { tx, nextDoc } from '../db/database.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { taxOn } from '../lib/money.js';
+import { resolveTenantId } from '../lib/tenant.js';
 
-const METHODS = new Set(['CASH', 'CARD', 'MOBILE', 'BANK', 'CREDIT']);
+const METHODS = new Set(['CASH', 'CARD', 'MOBILE', 'ECOCASH', 'BANK', 'CREDIT']);
 
 const cashTarget = (method) => (method === 'CASH' ? '1000' : '1010'); // CARD/MOBILE/BANK -> Bank
 
@@ -133,8 +134,9 @@ export class PosService {
     }
   }
 
-  getOrder(id) {
-    const o = this.db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  getOrder(id, tenantId) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const o = this.db.prepare('SELECT * FROM orders WHERE id = ? AND tenant_id = ?').get(id, tenant);
     if (!o) throw notFound('ORDER_NOT_FOUND');
     o.lines = this.db.prepare('SELECT * FROM order_lines WHERE order_id = ?').all(id);
     o.invoices = this.db.prepare('SELECT doc_no, kind, total_cents, paid_cents, status FROM ar_invoices WHERE order_id = ?').all(id);
@@ -144,10 +146,11 @@ export class PosService {
   _insertOrder({ type, status, lines, totals, customerId, user, locationId, note, meta, paidCents }) {
     const docNo = nextDoc(this.db, type === 'REFUND' ? 'RFD' : type);
     const { lastInsertRowid } = this.db.prepare(`
-      INSERT INTO orders (doc_no, type, status, customer_id, user_id, location_id, subtotal_cents, discount_cents, tax_cents, total_cents, paid_cents, note, meta)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO orders (doc_no, type, status, customer_id, user_id, location_id, subtotal_cents, discount_cents, tax_cents, total_cents, paid_cents, note, meta, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(docNo, type, status, customerId ?? null, user?.id ?? null, user?.locationId ?? null,
-      totals.subtotal, totals.discount, totals.tax, totals.total, paidCents ?? 0, note ?? '', meta ?? '');
+      totals.subtotal, totals.discount, totals.tax, totals.total, paidCents ?? 0, note ?? '', meta ?? '',
+      (user?.tenantId) ?? resolveTenantId(this.db));
     const ins = this.db.prepare(`
       INSERT INTO order_lines (order_id, product_id, product_name, qty, unit_price_cents, line_discount_cents, tax_cents, line_total_cents)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -205,7 +208,7 @@ export class PosService {
     const sale = tx(this.db, () => {
       if (cashInput > totals.total) change = cashInput - totals.total;
       const appliedCash = Math.max(0, (splits.CASH || 0) - change);
-      const appliedBank = (splits.CARD || 0) + (splits.MOBILE || 0) + (splits.BANK || 0)
+      const appliedBank = (splits.CARD || 0) + (splits.MOBILE || 0) + (splits.ECOCASH || 0) + (splits.BANK || 0)
         + Math.max(0, change - (splits.CASH || 0));
 
       const { id, docNo } = this._insertOrder({
@@ -450,14 +453,15 @@ export class PosService {
     });
   }
 
-  orders({ type, status, limit = 100 } = {}) {
-    const where = []; const vals = [];
-    if (type) { where.push('type = ?'); vals.push(type); }
-    if (status) { where.push('status = ?'); vals.push(status); }
+  orders({ type, status, tenantId, limit = 100 } = {}) {
+    const tenant = resolveTenantId(this.db, tenantId);
+    const where = ['o.tenant_id = ?']; const vals = [tenant];
+    if (type) { where.push('o.type = ?'); vals.push(type); }
+    if (status) { where.push('o.status = ?'); vals.push(status); }
     return this.db.prepare(`
       SELECT o.*, c.name AS customer_name FROM orders o
       LEFT JOIN customers c ON c.id = o.customer_id
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      WHERE ${where.join(' AND ')}
       ORDER BY o.id DESC LIMIT ?
     `).all(...vals, limit);
   }

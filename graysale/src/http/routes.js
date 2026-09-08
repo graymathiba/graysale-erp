@@ -1,8 +1,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AppError } from '../lib/errors.js';
+import { AppError, forbidden } from '../lib/errors.js';
 import { formatCents } from '../lib/money.js';
+import { LicensingService, makeEnforceTenantStatus } from '../../../src/licensing/index.js';
 
 const STATIC_DIR = fileURLToPath(new URL('../../public/', import.meta.url));
 // New React (Vite) frontend — preferred over the legacy public/ app when built.
@@ -20,6 +21,7 @@ function makeCtx(services, req, res, url) {
   const nicer = (n) => typeof n === 'number' ? n : (Number(n) || 0);
   return {
     services, req, res, url, user, token,
+    tenantId: (user && user.tenantId) || null,
     json(body, status = 200) {
       const pretty = typeof body === 'object' ? body : { ok: body };
       res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -55,6 +57,107 @@ export function buildHandler(services) {
 
   const requireCap = (cap) => (ctx) => auth.require(ctx.user, cap);
 
+  // Tenant owners may run the self-service profile endpoints; everyone else
+  // (no session, cashier, manager...) is refused here and by the service layer.
+  const ownerOnly = (ctx) => {
+    if (!ctx.user || ctx.user.role !== 'owner') throw forbidden();
+    return ctx.user;
+  };
+
+  // ----- licensing / Control Tower -----
+  const licensing = new LicensingService(S.db);
+  const superAdmin = (ctx) => auth.requireSuperAdmin(ctx.user);
+
+  route('GET', '/superadmin/overview', null, async ctx => { superAdmin(ctx); return ctx.json(licensing.overview()); });
+
+  route('GET', '/superadmin/tenants', null, async ctx => { superAdmin(ctx); return ctx.json(licensing.tenants.list({ search: ctx.query.search, status: ctx.query.status })); });
+  route('POST', '/superadmin/tenants', null, async ctx => {
+    superAdmin(ctx);
+    const b = await ctx.body();
+    const t = licensing.tenants.create({ companyName: b.companyName, ownerEmail: b.ownerEmail, status: b.status || 'PENDING_KEY', licenseKey: b.licenseKey, licenseExpiresAt: b.licenseExpiresAt });
+    auth.audit(ctx.user.id, ctx.user.username, 'TENANT_CREATE', 'tenant', t.id, t.company_name);
+    return ctx.json(t, 201);
+  });
+  route('GET', '/superadmin/tenants/:id', null, async ctx => { superAdmin(ctx); const t = licensing.tenants.get(ctx.params.id); if (!t) return ctx.json({ error: 'TENANT_NOT_FOUND' }, 404); return ctx.json(t); });
+  route('POST', '/superadmin/tenants/:id/toggle', null, async ctx => {
+    superAdmin(ctx);
+    const t = licensing.tenants.toggleAccess(ctx.params.id);
+    if (!t) return ctx.json({ error: 'TENANT_NOT_FOUND' }, 404);
+    auth.audit(ctx.user.id, ctx.user.username, t.status === 'BLOCKED' ? 'TENANT_BLOCK' : 'TENANT_UNBLOCK', 'tenant', t.id, t.company_name);
+    return ctx.json(t);
+  });
+  route('POST', '/superadmin/tenants/:id/extend', null, async ctx => {
+    superAdmin(ctx);
+    const b = await ctx.body();
+    const days = Number(b.days);
+    if (!Number.isInteger(days) || days <= 0) return ctx.json({ error: 'INVALID_DAYS' }, 400);
+    const t = licensing.tenants.extend(ctx.params.id, days);
+    if (!t) return ctx.json({ error: 'TENANT_NOT_FOUND' }, 404);
+    auth.audit(ctx.user.id, ctx.user.username, 'TENANT_EXTEND', 'tenant', t.id, `${days} days`);
+    return ctx.json(t);
+  });
+  route('PUT', '/superadmin/tenants/:id', null, async ctx => {
+    superAdmin(ctx);
+    const b = await ctx.body();
+    const t = S.tenantProfile.adminUpdate(ctx.params.id, b, ctx.user);
+    if (!t) return ctx.json({ error: 'TENANT_NOT_FOUND' }, 404);
+    return ctx.json(t);
+  });
+
+  route('GET', '/superadmin/keys', null, async ctx => { superAdmin(ctx); return ctx.json(licensing.keys.list({ status: ctx.query.status, search: ctx.query.search })); });
+  route('POST', '/superadmin/keys/generate', null, async ctx => {
+    superAdmin(ctx);
+    const b = await ctx.body();
+    const r = licensing.keys.generate({ planType: b.planType, count: b.count || 1, generatedBy: ctx.user.id });
+    auth.audit(ctx.user.id, ctx.user.username, 'KEY_GENERATE', 'product_key', null, `${r.count} x ${r.keys[0]?.planType}`);
+    return ctx.json(r, 201);
+  });
+  route('POST', '/superadmin/keys/check', null, async ctx => {
+    superAdmin(ctx);
+    const b = await ctx.body();
+    const k = licensing.keys.getByCode(b.keyCode);
+    if (!k) return ctx.json({ error: 'INVALID_KEY' }, 404);
+    return ctx.json(k);
+  });
+  route('POST', '/superadmin/keys/:id/revoke', null, async ctx => {
+    superAdmin(ctx);
+    const k = licensing.keys.revoke(ctx.params.id);
+    if (!k) return ctx.json({ error: 'KEY_NOT_FOUND' }, 404);
+    auth.audit(ctx.user.id, ctx.user.username, 'KEY_REVOKE', 'product_key', k.id, k.key_code);
+    return ctx.json(k);
+  });
+
+  // Tenant-facing key redemption (bypasses the tenant gate so a lapsed or
+  // pending-key instance can always reactivate itself).
+  route('POST', '/license/activate', null, async ctx => {
+    const b = await ctx.body();
+    const keyCode = b.keyCode || b.key_code;
+    if (!keyCode) return ctx.json({ error: 'MISSING_FIELD:keyCode' }, 400);
+    const tenant = licensing.currentTenant();
+    if (!tenant) return ctx.json({ error: 'NO_TENANT' }, 404);
+    const result = licensing.keys.redeem(keyCode, tenant.id);
+    if (!result.ok) return ctx.json(result, result.code === 'TENANT_NOT_FOUND' ? 404 : 400);
+    auth.audit(ctx.user?.id, ctx.user?.username, 'LICENSE_ACTIVATE', 'tenant', tenant.id, keyCode);
+    return ctx.json({ ok: true, tenant: result.tenant });
+  });
+
+  // Current tenant's license status — used by the /activate-license gate on
+  // first login. Always readable (no auth gate): shows whether activation is
+  // required and what the activity blocker returns before performing work.
+  route('GET', '/license/status', null, ctx => {
+    const tenant = licensing.currentTenant();
+    if (!tenant) return ctx.json({ error: 'NO_TENANT' }, 404);
+    const blocked = (tenant.status === 'PENDING_KEY' || tenant.status === 'PENDING_ACTIVATION' || tenant.status === 'BLOCKED');
+    return ctx.json({
+      status: tenant.status,
+      activated: !blocked,
+      activationRequired: blocked,
+      companyName: tenant.company_name,
+      licenseKey: tenant.license_key,
+      expiresAt: tenant.license_expires_at,
+    });
+  });
+
   // ----- auth -----
   route('POST', '/auth/login', null, async ctx => {
     const b = await ctx.body();
@@ -62,21 +165,24 @@ export function buildHandler(services) {
     return ctx.json(r, r.ok ? 200 : 401);
   });
   route('POST', '/auth/logout', null, ctx => { auth.logout(ctx.token); return ctx.json({ ok: true }); });
-  route('GET', '/auth/me', null, ctx => ctx.json(ctx.user ? { user: ctx.user } : { error: 'UNAUTHORIZED' }, ctx.user ? 200 : 401));
+  route('GET', '/auth/me', null, ctx => {
+    if (!ctx.user) return ctx.json({ error: 'UNAUTHORIZED' }, 401);
+    return ctx.json({ user: ctx.user, tenant: auth.tenantForUser(ctx.user) });
+  });
 
   // ----- users & audit -----
-  route('GET', '/users', 'users.view', ctx => ctx.json(auth.listUsers()));
+  route('GET', '/users', 'users.view', ctx => ctx.json(auth.listUsers(ctx.tenantId)));
   route('POST', '/users', 'users.manage', async ctx => {
     requireCap('users.manage')(ctx);
     const b = await ctx.body();
-    const id = auth.createUser({ ...b, fullName: b.fullName ?? b.full_name });
+    const id = auth.createUser({ ...b, fullName: b.fullName ?? b.full_name, tenantId: ctx.tenantId });
     auth.audit(ctx.user.id, ctx.user.username, 'USER_CREATE', 'user', id, b.username);
     return ctx.json({ id }, 201);
   });
   route('PUT', '/users/:id', 'users.manage', async ctx => {
     requireCap('users.manage')(ctx);
     const b = await ctx.body();
-    auth.updateUser(ctx.params.id, b);
+    auth.updateUser(ctx.params.id, b, ctx.tenantId);
     auth.audit(ctx.user.id, ctx.user.username, 'USER_UPDATE', 'user', ctx.params.id, JSON.stringify(b));
     return ctx.json({ ok: true });
   });
@@ -86,10 +192,10 @@ export function buildHandler(services) {
     const id = Number(ctx.params.id);
     let result;
     if (isPermanent) {
-      result = auth.deleteUser(id, ctx.user);
+      result = auth.deleteUser(id, ctx.user, ctx.tenantId);
       auth.audit(ctx.user.id, ctx.user.username, 'USER_DELETE', 'user', id, 'permanent');
     } else {
-      result = auth.deactivateUser(id, ctx.user);
+      result = auth.deactivateUser(id, ctx.user, ctx.tenantId);
       auth.audit(ctx.user.id, ctx.user.username, 'USER_DEACTIVATE', 'user', id, '');
     }
     return ctx.json(result);
@@ -97,19 +203,19 @@ export function buildHandler(services) {
   route('GET', '/audit', 'users.view', ctx => ctx.json(auth.listAudit(ctx.query.limit)));
 
   // ----- catalog -----
-  route('GET', '/products', null, ctx => ctx.json(catalog.listProducts({ search: ctx.query.search, categoryId: ctx.query.categoryId, includeInactive: ctx.query.all === '1' })));
-  route('GET', '/products/low', null, ctx => ctx.json(catalog.lowStock()));
-  route('GET', '/products/search', null, ctx => ctx.json({ q: ctx.query.q, results: catalog.listProducts({ search: ctx.query.q }) }));
+  route('GET', '/products', null, ctx => ctx.json(catalog.listProducts({ search: ctx.query.search, categoryId: ctx.query.categoryId, includeInactive: ctx.query.all === '1', tenantId: ctx.tenantId })));
+  route('GET', '/products/low', null, ctx => ctx.json(catalog.lowStock(ctx.tenantId)));
+  route('GET', '/products/search', null, ctx => ctx.json({ q: ctx.query.q, results: catalog.listProducts({ search: ctx.query.q, tenantId: ctx.tenantId }) }));
   route('GET', '/products/by-barcode/:barcode', null, ctx => {
-    const p = catalog.findByBarcode(ctx.params.barcode);
+    const p = catalog.findByBarcode(ctx.params.barcode, ctx.tenantId);
     return p ? ctx.json(p) : ctx.json({ error: 'NOT_FOUND' }, 404);
   });
-  route('GET', '/products/:id', null, ctx => ctx.json(catalog.getProduct(ctx.params.id)));
-  route('POST', '/products', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); const id = catalog.createProduct({ ...b, userId: ctx.user.id, username: ctx.user.username }); return ctx.json({ id }, 201); });
-  route('PUT', '/products/:id', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); catalog.updateProduct(ctx.params.id, b); auth.audit(ctx.user.id, ctx.user.username, 'PRODUCT_UPDATE', 'product', ctx.params.id, ''); return ctx.json({ ok: true }); });
-  route('DELETE', '/products/:id', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); auth.audit(ctx.user.id, ctx.user.username, 'PRODUCT_DELETE', 'product', ctx.params.id, ''); return ctx.json(catalog.deleteProduct(ctx.params.id)); });
-  route('GET', '/categories', null, ctx => ctx.json(catalog.categories()));
-  route('POST', '/categories', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); return ctx.json({ id: catalog.createCategory(b.name) }, 201); });
+  route('GET', '/products/:id', null, ctx => ctx.json(catalog.getProduct(ctx.params.id, ctx.tenantId)));
+  route('POST', '/products', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); const id = catalog.createProduct({ ...b, userId: ctx.user.id, username: ctx.user.username }, ctx.tenantId); return ctx.json({ id }, 201); });
+  route('PUT', '/products/:id', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); catalog.updateProduct(ctx.params.id, b, ctx.tenantId); auth.audit(ctx.user.id, ctx.user.username, 'PRODUCT_UPDATE', 'product', ctx.params.id, ''); return ctx.json({ ok: true }); });
+  route('DELETE', '/products/:id', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); auth.audit(ctx.user.id, ctx.user.username, 'PRODUCT_DELETE', 'product', ctx.params.id, ''); return ctx.json(catalog.deleteProduct(ctx.params.id, ctx.tenantId)); });
+  route('GET', '/categories', null, ctx => ctx.json(catalog.categories(ctx.tenantId)));
+  route('POST', '/categories', 'catalog.manage', async ctx => { requireCap('catalog.manage')(ctx); const b = await ctx.body(); return ctx.json({ id: catalog.createCategory(b.name, ctx.tenantId) }, 201); });
   route('GET', '/tax-classes', null, ctx => ctx.json(catalog.taxClasses()));
 
   // ----- product extended attributes -----
@@ -165,31 +271,31 @@ export function buildHandler(services) {
   });
 
   // ----- inventory -----
-  route('GET', '/inventory/stock', 'inventory.view', ctx => ctx.json(catalog.listProducts({ includeInactive: true })));
+  route('GET', '/inventory/stock', 'inventory.view', ctx => ctx.json(catalog.listProducts({ includeInactive: true, tenantId: ctx.tenantId })));
   route('GET', '/inventory/movements', 'inventory.view', ctx => ctx.json(catalog.movements({ productId: ctx.query.productId })));
   route('POST', '/inventory/adjust', 'inventory.adjust', async ctx => {
     requireCap('inventory.adjust')(ctx);
     const b = await ctx.body();
-    const q = catalog.move({ productId: b.productId, qty: b.qty, type: b.type || 'ADJUST', note: b.note, userId: ctx.user.id });
+    const q = catalog.move({ productId: b.productId, qty: b.qty, type: b.type || 'ADJUST', note: b.note, userId: ctx.user.id, tenantId: ctx.tenantId });
     auth.audit(ctx.user.id, ctx.user.username, 'INVENTORY_ADJUST', 'product', b.productId, `${b.type}:${b.qty} ${b.note || ''}`);
     return ctx.json({ qtyOnHand: q });
   });
 
   // ----- parties -----
-  route('GET', '/customers', null, ctx => ctx.json(customers.list({ search: ctx.query.search })));
-  route('POST', '/customers', 'customers.manage', async ctx => { const b = await ctx.body(); return ctx.json({ id: customers.create(b) }, 201); });
-  route('GET', '/customers/:id', null, ctx => ctx.json(customers.get(ctx.params.id)));
-  route('PUT', '/customers/:id', 'customers.manage', async ctx => { const b = await ctx.body(); return ctx.json(customers.update(ctx.params.id, b)); });
-  route('DELETE', '/customers/:id', 'customers.manage', async ctx => { auth.audit(ctx.user.id, ctx.user.username, 'CUSTOMER_DELETE', 'customer', ctx.params.id, ''); return ctx.json(customers.delete(ctx.params.id)); });
-  route('GET', '/customers/:id/ledger', null, ctx => ctx.json(customers.ledger(ctx.params.id)));
-  route('GET', '/customers/:id/layaways', null, ctx => ctx.json(customers.layaways(ctx.params.id)));
+  route('GET', '/customers', null, ctx => ctx.json(customers.list({ search: ctx.query.search, tenantId: ctx.tenantId })));
+  route('POST', '/customers', 'customers.manage', async ctx => { const b = await ctx.body(); return ctx.json({ id: customers.create(b, ctx.tenantId) }, 201); });
+  route('GET', '/customers/:id', null, ctx => ctx.json(customers.get(ctx.params.id, ctx.tenantId)));
+  route('PUT', '/customers/:id', 'customers.manage', async ctx => { const b = await ctx.body(); return ctx.json(customers.update(ctx.params.id, b, ctx.tenantId)); });
+  route('DELETE', '/customers/:id', 'customers.manage', async ctx => { auth.audit(ctx.user.id, ctx.user.username, 'CUSTOMER_DELETE', 'customer', ctx.params.id, ''); return ctx.json(customers.delete(ctx.params.id, ctx.tenantId)); });
+  route('GET', '/customers/:id/ledger', null, ctx => ctx.json(customers.ledger(ctx.params.id, 100, ctx.tenantId)));
+  route('GET', '/customers/:id/layaways', null, ctx => ctx.json(customers.layaways(ctx.params.id, ctx.tenantId)));
 
-  route('GET', '/suppliers', null, ctx => ctx.json(suppliers.list({ search: ctx.query.search })));
-  route('POST', '/suppliers', 'suppliers.manage', async ctx => { const b = await ctx.body(); return ctx.json({ id: suppliers.create(b) }, 201); });
-  route('GET', '/suppliers/:id', null, ctx => ctx.json(suppliers.get(ctx.params.id)));
-  route('PUT', '/suppliers/:id', 'suppliers.manage', async ctx => { const b = await ctx.body(); return ctx.json(suppliers.update(ctx.params.id, b)); });
-  route('DELETE', '/suppliers/:id', 'suppliers.manage', async ctx => { auth.audit(ctx.user.id, ctx.user.username, 'SUPPLIER_DELETE', 'supplier', ctx.params.id, ''); return ctx.json(suppliers.delete(ctx.params.id)); });
-  route('GET', '/suppliers/:id/ledger', null, ctx => ctx.json(suppliers.ledger(ctx.params.id)));
+  route('GET', '/suppliers', null, ctx => ctx.json(suppliers.list({ search: ctx.query.search, tenantId: ctx.tenantId })));
+  route('POST', '/suppliers', 'suppliers.manage', async ctx => { const b = await ctx.body(); return ctx.json({ id: suppliers.create(b, ctx.tenantId) }, 201); });
+  route('GET', '/suppliers/:id', null, ctx => ctx.json(suppliers.get(ctx.params.id, ctx.tenantId)));
+  route('PUT', '/suppliers/:id', 'suppliers.manage', async ctx => { const b = await ctx.body(); return ctx.json(suppliers.update(ctx.params.id, b, ctx.tenantId)); });
+  route('DELETE', '/suppliers/:id', 'suppliers.manage', async ctx => { auth.audit(ctx.user.id, ctx.user.username, 'SUPPLIER_DELETE', 'supplier', ctx.params.id, ''); return ctx.json(suppliers.delete(ctx.params.id, ctx.tenantId)); });
+  route('GET', '/suppliers/:id/ledger', null, ctx => ctx.json(suppliers.ledger(ctx.params.id, ctx.tenantId)));
 
   // ----- POS -----
   route('POST', '/pos/sell', 'pos.sell', async ctx => { requireCap('pos.sell')(ctx); const b = await ctx.body(); return ctx.json(pos.checkout({ ...b, user: ctx.user })); });
@@ -201,32 +307,32 @@ export function buildHandler(services) {
   route('POST', '/pos/quote', 'pos.quote', async ctx => { requireCap('pos.quote')(ctx); const b = await ctx.body(); return ctx.json(pos.createQuote({ ...b, user: ctx.user })); });
   route('POST', '/pos/quote/:id/convert', 'pos.quote', async ctx => { requireCap('pos.quote')(ctx); const b = await ctx.body(); return ctx.json(pos.convertQuote(ctx.params.id, b.payments, ctx.user)); });
 
-  route('GET', '/orders', null, ctx => ctx.json(pos.orders({ type: ctx.query.type, status: ctx.query.status })));
-  route('GET', '/orders/:id', null, ctx => ctx.json(pos.getOrder(ctx.params.id)));
+  route('GET', '/orders', null, ctx => ctx.json(pos.orders({ type: ctx.query.type, status: ctx.query.status, tenantId: ctx.tenantId })));
+  route('GET', '/orders/:id', null, ctx => ctx.json(pos.getOrder(ctx.params.id, ctx.tenantId)));
 
   // ----- invoicing (AR/AP) -----
-  route('GET', '/ar', 'invoicing.view', ctx => ctx.json(invoicing.listAr({ customerId: ctx.query.customerId, status: ctx.query.status, kind: ctx.query.kind })));
+  route('GET', '/ar', 'invoicing.view', ctx => ctx.json(invoicing.listAr({ customerId: ctx.query.customerId, status: ctx.query.status, kind: ctx.query.kind, tenantId: ctx.tenantId })));
   route('POST', '/ar', 'invoicing.manage', async ctx => {
     const b = await ctx.body();
     const inv = invoicing.createArInvoice({
       customerId: b.customerId, subtotalCents: b.subtotalCents, discountCents: b.discountCents,
-      taxCents: b.taxCents, dueDays: b.dueDays, note: b.note,
+      taxCents: b.taxCents, dueDays: b.dueDays, note: b.note, tenantId: ctx.tenantId,
     });
     auth.audit(ctx.user.id, ctx.user.username, 'AR_CREATE', 'ar_invoice', inv.id, inv.doc_no);
     return ctx.json(inv, 201);
   });
   route('POST', '/ar/credit-note', 'invoicing.manage', async ctx => {
     const b = await ctx.body();
-    const cn = invoicing.createCreditNote({ customerId: b.customerId, subtotalCents: b.subtotalCents, discountCents: b.discountCents, taxCents: b.taxCents, note: b.note });
+    const cn = invoicing.createCreditNote({ customerId: b.customerId, subtotalCents: b.subtotalCents, discountCents: b.discountCents, taxCents: b.taxCents, note: b.note, tenantId: ctx.tenantId });
     auth.audit(ctx.user.id, ctx.user.username, 'AR_CREDIT_NOTE', 'ar_invoice', cn.id, cn.doc_no);
     return ctx.json(cn, 201);
   });
-  route('GET', '/ap', 'invoicing.view', ctx => ctx.json(invoicing.listAp({ supplierId: ctx.query.supplierId, status: ctx.query.status })));
+  route('GET', '/ap', 'invoicing.view', ctx => ctx.json(invoicing.listAp({ supplierId: ctx.query.supplierId, status: ctx.query.status, tenantId: ctx.tenantId })));
 
   // ----- payments -----
   route('POST', '/payments/receive', 'invoicing.manage', async ctx => { const b = await ctx.body(); const p = payments.receivePayment({ ...b, user: ctx.user }); auth.audit(ctx.user.id, ctx.user.username, 'RECEIPT', 'payment', p.id, p.doc_no); return ctx.json(p, 201); });
   route('POST', '/payments/pay-supplier', 'purchasing.manage', async ctx => { const b = await ctx.body(); const p = payments.paySupplier({ ...b, user: ctx.user }); auth.audit(ctx.user.id, ctx.user.username, 'SUPPLIER_PAYMENT', 'payment', p.id, p.doc_no); return ctx.json(p, 201); });
-  route('GET', '/payments', null, ctx => ctx.json(payments.listPayments({ kind: ctx.query.kind, partyType: ctx.query.partyType, partyId: ctx.query.partyId })));
+  route('GET', '/payments', null, ctx => ctx.json(payments.listPayments({ kind: ctx.query.kind, partyType: ctx.query.partyType, partyId: ctx.query.partyId, tenantId: ctx.tenantId })));
 
   // ----- purchasing -----
   route('GET', '/purchase-orders', 'purchasing.view', ctx => ctx.json(purchasing.list({ status: ctx.query.status, supplierId: ctx.query.supplierId })));
@@ -287,17 +393,20 @@ export function buildHandler(services) {
   });
 
   // ----- reports -----
-  route('GET', '/reports/summary', null, ctx => ctx.json(reports.salesSummary({ from: ctx.query.from, to: ctx.query.to })));
-  route('GET', '/reports/top-products', null, ctx => ctx.json(reports.topProducts(NumID(ctx.query.limit, 10), { from: ctx.query.from, to: ctx.query.to })));
-  route('GET', '/reports/by-day', null, ctx => ctx.json(reports.salesByDay({ from: ctx.query.from, to: ctx.query.to })));
-  route('GET', '/reports/by-category', null, ctx => ctx.json(reports.salesByCategory({ from: ctx.query.from, to: ctx.query.to })));
-  route('GET', '/reports/cashiers', null, ctx => ctx.json(reports.cashierPerformance({ from: ctx.query.from, to: ctx.query.to })));
-  route('GET', '/reports/dead-stock', null, ctx => ctx.json(reports.deadStock(NumID(ctx.query.days, 30))));
+  route('GET', '/reports/summary', null, ctx => ctx.json(reports.salesSummary({ from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
+  route('GET', '/reports/top-products', null, ctx => ctx.json(reports.topProducts(NumID(ctx.query.limit, 10), { from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
+  route('GET', '/reports/by-day', null, ctx => ctx.json(reports.salesByDay({ from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
+  route('GET', '/reports/by-category', null, ctx => ctx.json(reports.salesByCategory({ from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
+  route('GET', '/reports/cashiers', null, ctx => ctx.json(reports.cashierPerformance({ from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
+  route('GET', '/reports/dead-stock', null, ctx => ctx.json(reports.deadStock(NumID(ctx.query.days, 30), ctx.tenantId)));
   route('GET', '/dashboard', null, ctx => ctx.json({
-    today: reports.salesSummary(),
-    byDay: reports.salesByDay({ from: new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) }),
-    lowStock: catalog.lowStock().slice(0, 8),
+    today: reports.salesSummary({ tenantId: ctx.tenantId }),
+    byDay: reports.salesByDay({ from: new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10), tenantId: ctx.tenantId }),
+    lowStock: catalog.lowStock(ctx.tenantId).slice(0, 8),
   }));
+
+  // Real financial dashboard stats — tenant-scoped SQL aggregation.
+  route('GET', '/dashboard/stats', null, async ctx => ctx.json(reports.dashboardStats({ from: ctx.query.from, to: ctx.query.to, tenantId: ctx.tenantId })));
 
   // ----- settings -----
   route('GET', '/settings', null, ctx => ctx.json({
@@ -315,14 +424,36 @@ export function buildHandler(services) {
       currency: 'company.currency', taxName: 'tax.name', termsDays: 'doc.default_terms_days',
     };
     const upsert = S.db.prepare(`
-      INSERT INTO settings (key, value) VALUES (?, ?)
+      INSERT INTO settings (key, value, tenant_id) VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `);
-    for (const [k, key] of Object.entries(map)) if (b[k] !== undefined) upsert.run(key, String(b[k]));
-    if (b.fiscal !== undefined) upsert.run('pos.fiscal', b.fiscal ? '1' : '0');
-    if (b.cashDrawer !== undefined) upsert.run('pos.cash_drawer', b.cashDrawer ? '1' : '0');
+    for (const [k, key] of Object.entries(map)) if (b[k] !== undefined) upsert.run(key, String(b[k]), ctx.tenantId);
+    if (b.fiscal !== undefined) upsert.run('pos.fiscal', b.fiscal ? '1' : '0', ctx.tenantId);
+    if (b.cashDrawer !== undefined) upsert.run('pos.cash_drawer', b.cashDrawer ? '1' : '0', ctx.tenantId);
     auth.audit(ctx.user.id, ctx.user.username, 'SETTINGS_UPDATE', null, null, JSON.stringify(b));
     return ctx.json({ ok: true });
+  });
+
+  // ----- company settings (dynamic invoice/quotation documents) -----
+  route('GET', '/company-settings', null, ctx => ctx.json(S.companySettings.get(ctx.tenantId)));
+  route('PUT', '/company-settings', 'settings.manage', async ctx => {
+    requireCap('settings.manage')(ctx);
+    const b = await ctx.body();
+    const saved = S.companySettings.update(b, ctx.tenantId);
+    auth.audit(ctx.user.id, ctx.user.username, 'SETTINGS_UPDATE', 'company_settings', 1, JSON.stringify(b));
+    return ctx.json(saved);
+  });
+
+  // ----- tenant profile (owner self-service) -----
+  route('GET', '/tenant/profile', null, async ctx => {
+    ownerOnly(ctx);
+    return ctx.json(S.tenantProfile.get(ctx.tenantId));
+  });
+  route('PUT', '/tenant/profile', null, async ctx => {
+    ownerOnly(ctx);
+    const b = await ctx.body();
+    const saved = S.tenantProfile.update(b, ctx.tenantId, ctx.user);
+    return ctx.json(saved);
   });
 
   // ----- printers -----
@@ -395,6 +526,7 @@ export function matchRoute(routes, method, segments) {
 // ---------- HTTP server ----------
 export function createHttpServer(services) {
   const routes = buildHandler(services);
+  const enforceTenantStatus = makeEnforceTenantStatus(services.db);
   return async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const segments = url.pathname.split('/').filter(Boolean);
@@ -402,7 +534,16 @@ export function createHttpServer(services) {
     ctx.query = Object.fromEntries(url.searchParams);
     try {
       if (segments[0] === 'api' && segments[1] === 'v1') {
-        const match = matchRoute(routes, req.method, segments.slice(2));
+        const rest = segments.slice(2);
+        // Licensing gate: superadmin + the whole /license scope (status check
+        // and key activation) are never blocked so a lapsed or unactivated
+        // instance can always see and fix its state.
+        const isSuperAdminScope = rest[0] === 'superadmin';
+        const isLicenseScope = rest[0] === 'license';
+        if (!isSuperAdminScope && !isLicenseScope) {
+          if (enforceTenantStatus(req, res, rest)) return;
+        }
+        const match = matchRoute(routes, req.method, rest);
         if (!match) return ctx.json({ error: 'NOT_FOUND' }, 404);
         if (match.caps) services.auth.require(ctx.user, match.caps);
         if (match.params) ctx.params = match.params;

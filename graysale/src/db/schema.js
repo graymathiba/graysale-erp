@@ -2,10 +2,41 @@
 const SCHEMA = `
 PRAGMA foreign_keys = ON;
 
+-- Control Tower tables (tenant registry + product activation keys). Declared
+-- first so every tenant-scoped table below can FK back to the registry above.
+CREATE TABLE IF NOT EXISTS tenants (
+  id TEXT PRIMARY KEY,
+  company_name TEXT NOT NULL,
+  owner_email TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  license_key TEXT,
+  license_expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_license_key ON tenants(license_key);
+
+CREATE TABLE IF NOT EXISTS product_keys (
+  id TEXT PRIMARY KEY,
+  key_code TEXT UNIQUE NOT NULL,
+  plan_type TEXT NOT NULL,
+  duration_days INTEGER NOT NULL,
+  is_used INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'UNUSED',
+  assigned_tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  generated_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_product_keys_status ON product_keys(status);
+CREATE INDEX IF NOT EXISTS idx_product_keys_assigned_tenant ON product_keys(assigned_tenant_id);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
-  value TEXT
+  value TEXT,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_settings_tenant ON settings(tenant_id);
 
 CREATE TABLE IF NOT EXISTS tax_classes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,8 +60,11 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'cashier',
   location_id INTEGER REFERENCES locations(id),
   active INTEGER NOT NULL DEFAULT 1,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+  is_super_admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
@@ -53,8 +87,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE TABLE IF NOT EXISTS product_categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_product_categories_tenant ON product_categories(tenant_id);
 
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,8 +118,10 @@ CREATE TABLE IF NOT EXISTS products (
   weight_grams INTEGER NOT NULL DEFAULT 0,
   length_mm INTEGER NOT NULL DEFAULT 0,
   width_mm INTEGER NOT NULL DEFAULT 0,
-  height_mm INTEGER NOT NULL DEFAULT 0
+  height_mm INTEGER NOT NULL DEFAULT 0,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id);
 
 CREATE TABLE IF NOT EXISTS product_stock (
   product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
@@ -114,8 +152,10 @@ CREATE TABLE IF NOT EXISTS customers (
   credit_limit_cents INTEGER NOT NULL DEFAULT 0,
   loyalty_points INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
 
 CREATE TABLE IF NOT EXISTS suppliers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,8 +166,10 @@ CREATE TABLE IF NOT EXISTS suppliers (
   address TEXT,
   tax_id TEXT,
   active INTEGER NOT NULL DEFAULT 1,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_suppliers_tenant ON suppliers(tenant_id);
 
 -- orders: SALE / REFUND / LAYAWAY / QUOTE
 CREATE TABLE IF NOT EXISTS orders (
@@ -146,8 +188,10 @@ CREATE TABLE IF NOT EXISTS orders (
   refunded_cents INTEGER NOT NULL DEFAULT 0,
   note TEXT,
   meta TEXT,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_orders_tenant ON orders(tenant_id);
 
 CREATE TABLE IF NOT EXISTS order_lines (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,8 +220,10 @@ CREATE TABLE IF NOT EXISTS ar_invoices (
   paid_cents INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'OPEN', -- OPEN, PARTIAL, PAID, VOID
   voided INTEGER NOT NULL DEFAULT 0,
-  note TEXT
+  note TEXT,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_ar_invoices_tenant ON ar_invoices(tenant_id);
 
 CREATE TABLE IF NOT EXISTS ap_bills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,8 +238,10 @@ CREATE TABLE IF NOT EXISTS ap_bills (
   paid_cents INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'OPEN',
   voided INTEGER NOT NULL DEFAULT 0,
-  note TEXT
+  note TEXT,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_ap_bills_tenant ON ap_bills(tenant_id);
 
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -241,8 +289,10 @@ CREATE TABLE IF NOT EXISTS payments (
   date TEXT NOT NULL,
   user_id INTEGER REFERENCES users(id),
   voided INTEGER NOT NULL DEFAULT 0,
-  note TEXT
+  note TEXT,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);
 
 CREATE TABLE IF NOT EXISTS payment_allocations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -450,6 +500,31 @@ export const ACC = {
 };
 
 export async function runMigrations(db) {
+  // Multi-tenant pre-migration: existing installs created before the tenant
+  // columns may lack tenant_id on tables the SCHEMA below indexes by tenant.
+  // Because CREATE TABLE IF NOT EXISTS is a no-op for those tables, the
+  // CREATE INDEX ... ON ...(tenant_id) statements in SCHEMA would fail with
+  // "no such column: tenant_id" unless the column is added here first.
+  const TENANT_TABLES = ['users', 'settings', 'product_categories', 'products',
+    'customers', 'suppliers', 'orders', 'ar_invoices', 'ap_bills', 'payments',
+    'company_settings'];
+  let hasTenantRegistry = false;
+  try {
+    hasTenantRegistry = !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'").get();
+  } catch { /* sqlite_master read is always safe */ }
+  if (hasTenantRegistry) {
+    const tenant = db.prepare('SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1').get();
+    for (const t of TENANT_TABLES) {
+      const exists = db.prepare("SELECT name FROM pragma_table_info(?) WHERE name = 'tenant_id'").get(t);
+      if (!exists) {
+        try { db.exec(`ALTER TABLE ${t} ADD COLUMN tenant_id TEXT`); } catch { /* column race */ }
+      }
+      if (tenant) {
+        try { db.exec(`UPDATE ${t} SET tenant_id = COALESCE(tenant_id, '${tenant.id}') WHERE tenant_id IS NULL`); } catch { /* */ }
+      }
+    }
+  }
+
   db.exec(SCHEMA);
 
   // Seed defaults only once.
@@ -542,6 +617,102 @@ export async function runMigrations(db) {
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
+  if (version < 6) {
+    // v6: company profile + banking for dynamic invoice/quotation documents.
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS company_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        company_name TEXT NOT NULL DEFAULT '',
+        trading_as TEXT NOT NULL DEFAULT '',
+        tagline TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        telephone TEXT NOT NULL DEFAULT '',
+        mobile TEXT NOT NULL DEFAULT '',
+        reg_number TEXT NOT NULL DEFAULT '',
+        tin_number TEXT NOT NULL DEFAULT '',
+        vat_number TEXT NOT NULL DEFAULT '',
+        banking_details TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`);
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema.version', '6')").run();
+    } catch (e) { /* table may already exist */ }
+  }
+  if (version < 7) {
+    // v7: multi-tenant Control Tower — tenants, product activation keys, and
+    // the super-admin flag. Shared shape with the main ERP's v5 migration so the
+    // same licensing services (src/licensing) run on either backend.
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0`);
+    } catch (e) { /* column may already exist */ }
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS tenants (
+        id TEXT PRIMARY KEY,
+        company_name TEXT NOT NULL,
+        owner_email TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        license_key TEXT,
+        license_expires_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      ); CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_license_key ON tenants(license_key);
+      CREATE TABLE IF NOT EXISTS product_keys (
+        id TEXT PRIMARY KEY,
+        key_code TEXT UNIQUE NOT NULL,
+        plan_type TEXT NOT NULL,
+        duration_days INTEGER NOT NULL,
+        is_used INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'UNUSED',
+        assigned_tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+        generated_by INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        used_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_product_keys_status ON product_keys(status);
+      CREATE INDEX IF NOT EXISTS idx_product_keys_assigned_tenant ON product_keys(assigned_tenant_id);`);
+      const hasTenant = db.prepare('SELECT COUNT(*) AS c FROM tenants').get().c;
+      if (hasTenant === 0) {
+        const name = db.prepare("SELECT value FROM settings WHERE key = 'company.name'").get()?.value || 'My Store';
+        // Fresh installs start PENDING_ACTIVATION so the first login must redeem
+        // a product key before any ERP screen unlocks.
+        db.prepare(
+          'INSERT INTO tenants (id, company_name, owner_email, status, license_expires_at) VALUES (?, ?, ?, ?, ?)'
+        ).run(uuidv4(), name, '', 'PENDING_ACTIVATION', null);
+      }
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema.version', '7')").run();
+    } catch (e) { /* table may already exist */ }
+  }
+
+  if (version < 8) {
+    // v8: Strict multi-tenant isolation. Every business table is bound to the
+    // tenant it belongs to (tenants.id, TEXT UUID). Existing rows are backfilled
+    // onto the instance's current tenant so single-instance data stays scoped;
+    // new Control Tower tenants stamp rows via the request tenant context.
+    // NOTE: SQLite ALTER TABLE can only ADD COLUMN with a NULL default, so the
+    // FK constraint + ON DELETE CASCADE live on the fresh-DB CREATE TABLEs and
+    // existing installs get a plain nullable column backfilled below.
+    const T = ['users', 'settings', 'products', 'product_categories', 'customers',
+      'suppliers', 'orders', 'ar_invoices', 'ap_bills', 'payments', 'company_settings'];
+    db.exec('BEGIN');
+    try {
+      for (const t of T) {
+        try { db.exec(`ALTER TABLE ${t} ADD COLUMN tenant_id TEXT`); } catch { /* column exists */ }
+      }
+      const tenant = db.prepare('SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1').get();
+      if (tenant) {
+        for (const t of T) {
+          try { db.exec(`UPDATE ${t} SET tenant_id = COALESCE(tenant_id, '${tenant.id}') WHERE tenant_id IS NULL`); } catch { /* */ }
+        }
+      }
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema.version', '8')").run();
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); }
+  }
+}
+
+function uuidv4() {
+  let b = '';
+  for (let i = 0; i < 16; i++) b += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+  return `${b.slice(0, 8)}-${b.slice(8, 12)}-4${b.slice(13, 16)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${b.slice(17, 20)}-${b.slice(20, 32)}`;
 }
 
 export default { runMigrations };
