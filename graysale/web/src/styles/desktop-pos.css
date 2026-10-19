@@ -1,0 +1,577 @@
+/* ============================================================
+   Classic Desktop POS — Retail Man-style checkout screen.
+   Depends on pos-terminal.css for shared modal / layby classes.
+   ============================================================ */
+.dskpos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 296px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  background: #e8edf3;
+  font-size: 12.5px;
+}
+
+/* ---------- left: customer + cart ---------- */
+.dskpos-left {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.dskpos-cust {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f7fafc;
+  border-bottom: 1px solid var(--border-strong);
+  min-height: 38px;
+  position: relative;
+}
+.dskpos-cust .lbl {
+  font-weight: 700;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  text-transform: uppercase;
+}
+.dskpos-cust input[type='text'] {
+  flex: 0 1 240px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.dskpos-cust-results {
+  position: absolute;
+  top: 100%;
+  left: 110px;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: 0 0 6px 6px;
+  box-shadow: var(--shadow-md);
+  min-width: 260px;
+}
+.dskpos-cust-results button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 6px 9px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.dskpos-cust-results button:hover {
+  background: var(--accent-l);
+}
+.dskpos-cust-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.dskpos-cust-card .avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 10.5px;
+}
+.dskpos-cust-name {
+  font-weight: 700;
+}
+.dskpos-cust-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+.dskpos-cust-stats {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ---------- scan / manual search bar (top of the cart) ---------- */
+.dskpos-scan {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px 7px;
+  background: #f7fafc;
+  border-top: 1px solid #e3eaf1;
+}
+.dskpos-scan input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #93a8bf;
+  border-radius: 4px;
+}
+.dskpos-scan input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-l);
+}
+.dskpos-scan input::placeholder {
+  color: var(--muted);
+}
+
+/* ---------- cart table ---------- */
+.dskpos-tablewrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+.dskpos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.dskpos-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #dfe7f1;
+  border-bottom: 2px solid #9fb3c8;
+  border-right: 1px solid #c9d6e3;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.dskpos-table th.num,
+.dskpos-table td.num {
+  text-align: right;
+}
+.dskpos-table th.col-qty,
+.dskpos-table td.col-qty {
+  width: 56px;
+}
+.dskpos-table th.col-amt,
+.dskpos-table td.col-amt,
+.dskpos-table th.col-disc,
+.dskpos-table td.col-disc,
+.dskpos-table th.col-tax,
+.dskpos-table td.col-tax,
+.dskpos-table th.col-tot,
+.dskpos-table td.col-tot {
+  width: 92px;
+}
+.dskpos-table tbody td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid #eef2f6;
+}
+.dskpos-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+.dskpos-table tbody tr:hover {
+  background: var(--accent-l);
+  cursor: pointer;
+}
+.dskpos-table tbody tr.sel {
+  background: var(--blue-l);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.dskpos-table .mono {
+  font-variant-numeric: tabular-nums;
+}
+.dskpos-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 26px 0 !important;
+}
+/* sticky summary row — the classic bottom line */
+.dskpos-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #12365e;
+  color: #fff;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-top: 2px solid #0c2748;
+  text-align: right;
+}
+.dskpos-table tfoot td.lbl {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.dskpos-status {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 4px 10px;
+  background: #f0f4f8;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 11px;
+}
+.dskpos-status b {
+  color: var(--ink);
+}
+
+.dskpos-fnbar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #dfe7f1;
+  border-top: 1px solid #b9c8d8;
+}
+.dskpos-fnbar .fn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #9fb3c8;
+  background: #fff;
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.dskpos-fnbar .fn:hover {
+  background: var(--accent-l);
+  border-color: var(--accent);
+  color: var(--accent-d);
+}
+.dskpos-fnbar kbd {
+  font-size: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* ---------- right column: keypad + fin box ---------- */
+.dskpos-right {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-left: 1px solid #b9c8d8;
+  background: #eef2f7;
+  overflow: auto;
+  min-height: 0;
+}
+.dskpos-kp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dskpos-kp-readout {
+  background: #10233a;
+  color: #8df0b0;
+  border-radius: 4px;
+  text-align: right;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 7px 10px;
+  min-height: 34px;
+  letter-spacing: 0.02em;
+}
+.dskpos-kp-readout.kp-tender {
+  color: #ffd76d;
+}
+.dskpos-kp-ops {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.dskpos-kp-ops button {
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fff;
+  padding: 5px 0;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.dskpos-kp-ops button:hover {
+  background: var(--surface-3);
+}
+.dskpos-kp-ops .op-enter {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.dskpos-kp-ops .op-enter:hover {
+  background: #15803d;
+}
+.dskpos-kp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.dskpos-kp-grid button {
+  border: 1px solid #b9c8d8;
+  border-radius: 4px;
+  background: #fff;
+  padding: 11px 0;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink);
+}
+.dskpos-kp-grid button:hover {
+  background: var(--blue-l);
+}
+.dskpos-kp-grid button:active {
+  background: var(--accent);
+  color: #fff;
+}
+.dskpos-kp-grid .kp-minus {
+  background: var(--amber-l);
+  border-color: #e5c88a;
+}
+
+/* the big blue Save (F2) key */
+.dskpos-save {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 64px;
+  border: 1px solid var(--accent-d);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #0e3fa8;
+}
+.dskpos-save:hover {
+  filter: brightness(1.06);
+}
+.dskpos-save:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #0e3fa8;
+}
+.dskpos-save small {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* fin box — Total / Paid / Change */
+.dskpos-fin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+}
+.dskpos-fin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+.dskpos-fin-row span {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dskpos-fin-row b {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.dskpos-fin-row.f-total {
+  background: var(--red-l);
+  border-color: #f3b4b4;
+  color: #991b1b;
+}
+.dskpos-fin-row.f-paid {
+  background: var(--green-l);
+  border-color: #a9e6bf;
+  color: #166534;
+}
+.dskpos-fin-row.f-chg {
+  background: var(--amber-l);
+  border-color: #edd08a;
+  color: #92400e;
+}
+.dskpos-disc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.dskpos-disc label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.dskpos-disc input {
+  width: 74px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  text-align: right;
+  font-size: 12.5px;
+}
+
+/* ---------- bottom: categories + product tiles ---------- */
+.dskpos-bottom {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px 9px;
+  background: #dfe7f1;
+  border-top: 1px solid #b9c8d8;
+  max-height: 218px;
+}
+.dskpos-cats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dskpos-cat {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #e2e8f0;
+  color: #334155;
+}
+.dskpos-cat:hover {
+  filter: brightness(0.96);
+}
+.dskpos-cat.on {
+  background: #334155 !important;
+  color: #fff !important;
+  border-color: #1e293b;
+}
+.dskpos-cat.cat-violet {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.dskpos-cat.cat-all {
+  background: #fff;
+  color: var(--accent-d);
+  border-color: var(--accent);
+}
+.dskpos-fast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(122px, 1fr));
+  gap: 6px;
+  overflow: auto;
+  min-height: 0;
+}
+.dskpos-fastkey {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: 1px solid #b9c8d8;
+  border-radius: 5px;
+  background: #fff;
+  padding: 7px 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.dskpos-fastkey:hover {
+  border-color: var(--accent);
+  background: var(--accent-l);
+}
+.dskpos-fastkey .fk-name {
+  font-weight: 700;
+  font-size: 11.5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dskpos-fastkey .fk-price {
+  color: var(--accent-d);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dskpos-fastkey .fk-stock {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.dskpos-empty2 {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px 2px;
+}
+.dskpos-fasterr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9a3412;
+}
+.dskpos-retry {
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-d, #155099);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dskpos-retry:hover {
+  filter: brightness(1.1);
+}
+
+/* no-shift banner sits over the whole terminal */
+.dskpos-noshift {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: #fff7ed;
+  border: 1px solid #f0c48a;
+  color: #9a3412;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  box-shadow: var(--shadow-md);
+}
+.dskpos-wrap {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  .dskpos {
+    grid-template-columns: minmax(0, 1fr) 252px;
+  }
+}

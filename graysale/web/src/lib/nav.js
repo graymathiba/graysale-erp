@@ -25,6 +25,7 @@ export const NAV_GROUPS = [
       { key: 'storage', label: 'Data Storage', route: '/storage' },
       { key: 'settings', label: 'Settings', route: '/settings', cap: 'settings.manage' },
       { key: 'users', label: 'User Management', route: '/users', cap: 'users.manage' },
+      { key: 'desktop', label: 'Classic Desktop', route: '/desktop' },
       { key: 'support', label: 'Support', route: '/support' },
       { key: 'control-tower', label: 'Control Tower', route: '/admin/control-tower', super: true },
     ],

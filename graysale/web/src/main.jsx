@@ -28,6 +28,9 @@ import CompanyProfilePage from './pages/CompanyProfilePage';
 import UsersPage from './pages/UsersPage';
 import SupportPage from './pages/SupportPage';
 import ControlTowerLayout from './pages/controlTower/ControlTowerLayout';
+import DesktopShell from './components/DesktopShell';
+import DesktopHomePage from './pages/DesktopHomePage';
+import DesktopPOSPage from './pages/DesktopPOSPage';
 import { api } from './api/client';
 
 function RequireAuth({ children }) {
@@ -204,6 +207,35 @@ function App() {
                   </RequireSuperAdmin>
                 }
               />
+            </Route>
+
+            {/* ============ Classic Desktop mode (Retail Man-style shell) ============ */}
+            <Route
+              element={
+                <RequireStorage>
+                  <RequireAuth>
+                    <RequireActiveTenant>
+                      <DesktopShell />
+                    </RequireActiveTenant>
+                  </RequireAuth>
+                </RequireStorage>
+              }
+            >
+              <Route path="/desktop" element={<DesktopHomePage />} />
+              <Route path="/desktop/pos" element={<DesktopPOSPage />} />
+              <Route path="/desktop/stock" element={<StockPage />} />
+              <Route path="/desktop/customers" element={<CustomersPage />} />
+              <Route path="/desktop/suppliers" element={<SuppliersPage />} />
+              <Route path="/desktop/purchasing" element={<PurchasingPage />} />
+              <Route path="/desktop/invoices" element={<InvoicesPage />} />
+              <Route path="/desktop/accounting" element={<AccountingPage />} />
+              <Route path="/desktop/reports" element={<ReportsPage />} />
+              <Route path="/desktop/eod" element={<EodPage />} />
+              <Route path="/desktop/settings" element={<SettingsPage />} />
+              <Route path="/desktop/users" element={<UsersPage />} />
+              <Route path="/desktop/storage" element={<StoragePage />} />
+              <Route path="/desktop/company-profile" element={<CompanyProfilePage />} />
+              <Route path="/desktop/support" element={<SupportPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
