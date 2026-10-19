@@ -18,11 +18,20 @@ export default function DashboardPage() {
         const [s, d] = await Promise.all([api.get('/dashboard/stats'), api.get('/dashboard')]);
         setStats(s);
         setSummary(d);
-      } catch (e) { if (e?.silent) return; toast.err(e.message); }
+      } catch (e) {
+        if (e?.silent) return;
+        toast.err(e.message);
+      }
     })();
   }, []);
 
-  if (!stats || !summary) return <div className="loader"><span className="spinner" />Loading…</div>;
+  if (!stats || !summary)
+    return (
+      <div className="loader">
+        <span className="spinner" />
+        Loading…
+      </div>
+    );
 
   const byDay = summary.byDay || [];
   const lowStock = summary.lowStock || [];
@@ -39,18 +48,35 @@ export default function DashboardPage() {
 
       <div className="stat-cards">
         <Stat k="Gross Sales" v={fmtMoney(stats.grossSales ?? 0)} d={`${stats.totalSalesCount ?? 0} paid sale(s)`} />
-        <Stat k="Net Revenue" v={fmtMoney(stats.totalRevenue ?? 0)} d={`${fmtMoney(stats.refunds ?? 0)} refunded`} tone="green" />
-        <Stat k="Receivables (AR)" v={fmtMoney(stats.totalBalanceDue ?? 0)} d="Open invoices + layaways" tone="violet" />
+        <Stat
+          k="Net Revenue"
+          v={fmtMoney(stats.totalRevenue ?? 0)}
+          d={`${fmtMoney(stats.refunds ?? 0)} refunded`}
+          tone="green"
+        />
+        <Stat
+          k="Receivables (AR)"
+          v={fmtMoney(stats.totalBalanceDue ?? 0)}
+          d="Open invoices + layaways"
+          tone="violet"
+        />
         <Stat k="Payables (AP)" v={fmtMoney(stats.totalPayable ?? 0)} d="Owed to suppliers" tone="amber" />
         <Stat k="Cash in Drawer" v={fmtMoney(stats.cashTotal ?? 0)} d="Cash collected" tone="green" />
         <Stat k="Mobile / EcoCash" v={fmtMoney(stats.ecoCashTotal ?? 0)} d="EcoCash and mobile money" tone="violet" />
         <Stat k="Mobile Only" v={fmtMoney(stats.mobileTotal ?? 0)} d="Mobile money" tone="amber" />
-        <Stat k="Low Stock" v={stats.lowStockCount ?? 0} d="Items below reorder level" tone={stats.lowStockCount ? 'red' : 'green'} />
+        <Stat
+          k="Low Stock"
+          v={stats.lowStockCount ?? 0}
+          d="Items below reorder level"
+          tone={stats.lowStockCount ? 'red' : 'green'}
+        />
       </div>
 
       <div className="two-col">
         <div className="panel">
-          <div className="panel-hd"><span>Sales — last 7 days</span></div>
+          <div className="panel-hd">
+            <span>Sales — last 7 days</span>
+          </div>
           <div className="bars">
             {byDay.map((r) => {
               const val = r.sales || 0;
@@ -68,7 +94,9 @@ export default function DashboardPage() {
         </div>
 
         <div className="panel">
-          <div className="panel-hd"><span>Low stock alerts</span></div>
+          <div className="panel-hd">
+            <span>Low stock alerts</span>
+          </div>
           <div className="lows">
             {lowStock.map((p) => (
               <div className="low-row" key={p.id}>

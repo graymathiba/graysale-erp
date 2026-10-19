@@ -121,4 +121,47 @@ void main() {
     final pending = await store.pendingSales();
     expect(pending.single.lines.single.productName, 'Milk');
   });
+
+  test('retry after a partial failure re-pushes only the unacked sale', () async {
+    final store = FakeLocalStore();
+    await store.addSale(sale('a1', 100));
+    await store.addSale(sale('b2', 200));
+
+    // First attempt: server acks only a1 (e.g. response dropped mid-flight).
+    final first = FakeApi(onSync: (payload) async {
+      return const SyncSalesResult(success: true, syncedIds: ['a1']);
+    });
+    final r1 = await SyncService(api: first, store: store).syncNow();
+    expect(r1.ok, isFalse);
+    expect(r1.failures, ['b2']);
+
+    // Retry: the already-synced sale must NOT be sent again (server-side
+    // dedupe by local id is the fallback, but we avoid the round-trip here).
+    final second = FakeApi(onSync: (payload) async {
+      expect(payload.map((p) => p['id']), ['b2']);
+      return const SyncSalesResult(success: true, syncedIds: ['b2']);
+    });
+    final r2 = await SyncService(api: second, store: store).syncNow();
+
+    expect(r2.ok, isTrue);
+    expect(r2.synced, ['b2']);
+    expect(first.calls.single.map((p) => p['id']), ['a1', 'b2']);
+    expect(second.calls, hasLength(1));
+    expect(await store.countPending(), 0);
+  });
+
+  test('syncNow result accounting: total and ok flags', () async {
+    final store = FakeLocalStore();
+    await store.addSale(sale('a1', 100));
+    final api = FakeApi(onSync: (payload) async {
+      return const SyncSalesResult(success: true, syncedIds: ['a1'], duplicates: []);
+    });
+    final result = await SyncService(api: api, store: store).syncNow();
+    expect(result.total, 1);
+    expect(result.ok, isTrue);
+
+    final empty = await SyncService(api: FakeApi(), store: FakeLocalStore()).syncNow();
+    expect(empty.total, 0);
+    expect(empty.ok, isTrue);
+  });
 }

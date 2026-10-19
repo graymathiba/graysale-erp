@@ -38,22 +38,31 @@ export default function KeyGenerator() {
 
   useEffect(() => {
     (async () => {
-      try { await load(); }
-      catch (e) { if (!e?.silent) toast.err(e.message); }
+      try {
+        await load();
+      } catch (e) {
+        if (!e?.silent) toast.err(e.message);
+      }
     })();
   }, [load]);
 
   const generate = async () => {
     const n = Number(count);
-    if (!Number.isInteger(n) || n < 1 || n > 100) { toast.err('Count must be 1–100'); return; }
+    if (!Number.isInteger(n) || n < 1 || n > 100) {
+      toast.err('Count must be 1–100');
+      return;
+    }
     setBusy(true);
     try {
       const r = await api.post('/superadmin/keys/generate', { planType, count: n });
       setGenerated(r.keys || []);
       toast.ok(`${r.count} key(s) generated`);
       await load();
-    } catch (e) { if (!e?.silent) toast.err(e.message); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (!e?.silent) toast.err(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const revoke = async (k) => {
@@ -62,7 +71,9 @@ export default function KeyGenerator() {
       await api.post(`/superadmin/keys/${k.id}/revoke`);
       toast.ok(`${k.key_code} revoked`);
       await load();
-    } catch (e) { if (!e?.silent) toast.err(e.message); }
+    } catch (e) {
+      if (!e?.silent) toast.err(e.message);
+    }
   };
 
   const copy = async (code) => {
@@ -84,13 +95,19 @@ export default function KeyGenerator() {
     <div className="ct-view">
       <div className="grid-1-1">
         <div className="panel">
-          <div className="panel-hd"><span>Generate activation keys</span></div>
+          <div className="panel-hd">
+            <span>Generate activation keys</span>
+          </div>
           <div className="panel-bd">
             <div className="fields-3">
               <div className="field">
                 <label>Plan duration</label>
                 <select value={planType} onChange={(e) => setPlanType(e.target.value)}>
-                  {PLANS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  {PLANS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -108,12 +125,16 @@ export default function KeyGenerator() {
               <div className="ct-generated mt-4">
                 <div className="ct-generated-hd">
                   <span>New keys — ready to distribute (SMS / WhatsApp / Email)</span>
-                  <button className="btn-link" onClick={() => setGenerated([])}>Dismiss</button>
+                  <button className="btn-link" onClick={() => setGenerated([])}>
+                    Dismiss
+                  </button>
                 </div>
                 {generated.map((k, i) => (
                   <div className="ct-key-row" key={i}>
                     <code className="ct-key-code">{k.keyCode}</code>
-                    <span className="muted" style={{ fontSize: 11 }}>{PLANS.find((p) => p.value === k.planType)?.label}</span>
+                    <span className="muted" style={{ fontSize: 11 }}>
+                      {PLANS.find((p) => p.value === k.planType)?.label}
+                    </span>
                     <button className="btn btn-sm" onClick={() => copy(k.keyCode)}>
                       {copied === k.keyCode ? 'Copied ✓' : 'Copy Key'}
                     </button>
@@ -125,7 +146,9 @@ export default function KeyGenerator() {
         </div>
 
         <div className="panel">
-          <div className="panel-hd"><span>Key inventory</span></div>
+          <div className="panel-hd">
+            <span>Key inventory</span>
+          </div>
           <div className="panel-bd">
             <div className="seg" style={{ marginBottom: 12 }}>
               {STATUS_TABS.map((s) => (
@@ -136,7 +159,10 @@ export default function KeyGenerator() {
             </div>
             <div className="ct-inventory">
               {!keys ? (
-                <div className="loader"><span className="spinner" />Loading…</div>
+                <div className="loader">
+                  <span className="spinner" />
+                  Loading…
+                </div>
               ) : keys.length === 0 ? (
                 <div className="empty-state">No keys match this filter.</div>
               ) : (
@@ -156,7 +182,9 @@ export default function KeyGenerator() {
                         {copied === k.key_code ? 'Copied ✓' : 'Copy'}
                       </button>
                       {k.status === 'UNUSED' && (
-                        <button className="btn-link danger" onClick={() => revoke(k)}>Revoke</button>
+                        <button className="btn-link danger" onClick={() => revoke(k)}>
+                          Revoke
+                        </button>
                       )}
                     </div>
                   </div>

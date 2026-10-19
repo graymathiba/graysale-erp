@@ -1,0 +1,115 @@
+/* Root variables + legacy shell emulation (split from theme.css — keep order in sync via theme.css @imports) */
+/* ============================================================
+   GraySale ERP — VANTUS-inspired light design system
+   Canvas #F8FAFC · Surfaces #FFFFFF · Borders #E2E8F0
+   Accent Sky/Electic blue #0284C7 / #0EA5E9 · Muted slate #64748B
+   ============================================================ */
+:root {
+  /* Legacy GraySale light theme tokens (unified canonical palette) */
+  --canvas: #f6f8fb; /* page background */
+  --surface: #ffffff; /* card/panel background */
+  --surface-2: #f7fafc; /* subtle surface */
+  --surface-3: #eef2f6; /* table row / border background */
+  --border: #e6eef6; /* panel borders */
+  --border-strong: #d1e2ee; /* stronger border */
+  --ink: #0b1a2b; /* primary text */
+  --ink-2: #1f3a57; /* secondary text */
+  --muted: #6b7a8a; /* muted */
+  --faint: #98a6b3; /* faint */
+  --accent: #0d6efd; /* legacy blue brand */
+  --accent-bright: #2aa0ff; /* lighter accent */
+  --accent-l: #e7f5ff; /* accent light */
+  --accent-l2: #dbeeff;
+  --accent-d: #0a58ca;
+  --green: #16a34a;
+  --green-l: #dcfce7;
+  --red: #dc2626;
+  --red-l: #fee2e2;
+  --amber: #d97706;
+  --amber-l: #fef3c7;
+  --blue: #2563eb;
+  --blue-l: #dbeafe;
+  --violet: #7c3aed;
+  --violet-l: #ede9fe;
+  --slate-line: rgba(13, 110, 253, 0.08);
+  --shadow-sm: 0 2px 6px rgba(23, 43, 77, 0.04);
+  --shadow-md: 0 10px 30px rgba(23, 43, 77, 0.08);
+  --shadow-lg: 0 24px 60px rgba(23, 43, 77, 0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Small overrides to emulate the legacy page header and sidebar look */
+.topbar {
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+}
+.sidebar {
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+}
+.panel {
+  background: var(--surface);
+}
+.brand-mark {
+  background: linear-gradient(135deg, var(--accent), var(--accent-d));
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  font-family: var(--font);
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 6px;
+  border: 2px solid var(--canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}

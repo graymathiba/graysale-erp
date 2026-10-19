@@ -1,0 +1,204 @@
+/* Table emphasis, settings grids, EOD banner, printers (split from theme.css — keep order in sync via theme.css @imports) */
+/* ---------- Table total / emphasis rows ---------- */
+.lbl {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.grand-row td {
+  background: var(--surface-2);
+  border-top: 2px solid var(--border-strong);
+  color: var(--ink);
+  font-weight: 800;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.total-row td {
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.total-row td {
+  border-top: 1px solid var(--border);
+}
+.variance td {
+  font-weight: 700;
+}
+.variance .num {
+  color: var(--amber);
+}
+
+/* ---------- Settings: form grid + checkbox group ---------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  padding: 16px 18px 4px;
+}
+.panel > .checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 18px 18px;
+}
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+/* ---------- Generic avatar (customers / POS / layby / profile) ---------- */
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cd .avatar {
+  background: linear-gradient(135deg, var(--accent-l), var(--accent-l2));
+  color: var(--accent-d);
+  border: 1px solid var(--accent-l2);
+}
+
+/* ---------- Support help list ---------- */
+.help-list {
+  margin: 8px 0 4px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.help-list li {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---------- EOD banner + X-report chrome ---------- */
+.eod-banner {
+  display: flex;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.eod-current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.eod-current .btn {
+  margin-left: auto;
+}
+.ec-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px var(--green-l);
+  flex-shrink: 0;
+}
+.ec-title {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 14px;
+}
+.ec-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.eod-noshift {
+  color: var(--faint);
+  font-size: 13px;
+}
+.eod-report .er-hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.er-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.er-status {
+  flex-shrink: 0;
+}
+
+/* ---------- Receipt printers ---------- */
+.printer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.printer-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.printer-card.default {
+  border-color: var(--green);
+  box-shadow:
+    0 0 0 1px var(--green-l),
+    var(--shadow-sm);
+}
+.pc-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pc-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pc-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pc-actions .btn {
+  flex: 1;
+  min-width: 96px;
+}
+@media (max-width: 640px) {
+  .printer-grid {
+    grid-template-columns: 1fr;
+  }
+  .pc-actions .btn {
+    flex: 1 1 40%;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

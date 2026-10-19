@@ -1,0 +1,272 @@
+/* Buttons, badges, panels, metric cards (split from theme.css — keep order in sync via theme.css @imports) */
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.3);
+}
+.btn-primary:hover {
+  background: var(--accent-d);
+  border-color: var(--accent-d);
+  color: #fff;
+}
+.btn-bright {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: #fff;
+}
+.btn-bright:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-success {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.btn-success:hover {
+  background: #15803d;
+  color: #fff;
+}
+.btn-danger {
+  background: #fff;
+  border-color: #fecaca;
+  color: var(--red);
+}
+.btn-danger:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn-danger-solid {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn-danger-solid:hover {
+  background: #b91c1c;
+  color: #fff;
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+.btn-lg {
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+/* ---------- Badges ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.badge-green {
+  background: var(--green-l);
+  color: #15803d;
+}
+.badge-red {
+  background: var(--red-l);
+  color: #b91c1c;
+}
+.badge-amber {
+  background: var(--amber-l);
+  color: #b45309;
+}
+.badge-blue {
+  background: var(--accent-l);
+  color: var(--accent-d);
+}
+.badge-sky {
+  background: var(--accent-l);
+  color: var(--accent-d);
+}
+.badge-violet {
+  background: var(--violet-l);
+  color: #6d28d9;
+}
+.badge-gray {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+/* ---------- Panels / cards ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.panel-hd {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.panel-bd {
+  padding: 16px;
+}
+
+/* ---------- Metric / stat cards ---------- */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 18px 16px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+}
+.stat-card .k {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 10px;
+  padding: 0 0 10px 0;
+  border-bottom: 1px solid var(--surface-3);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+}
+.stat-card .k::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.stat-card .v {
+  font-size: 26px;
+  font-weight: 800;
+  margin-top: 2px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-card .d {
+  color: var(--faint);
+  font-size: 12px;
+  margin-top: 5px;
+  line-height: 1.3;
+}
+.stat-card.tone-green .k::before {
+  background: var(--green);
+}
+.stat-card.tone-red .k::before {
+  background: var(--red);
+}
+.stat-card.tone-amber .k::before {
+  background: var(--amber);
+}
+.stat-card.tone-violet .k::before {
+  background: var(--violet);
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  box-shadow: var(--shadow-sm);
+  min-height: 88px;
+  position: relative;
+  overflow: hidden;
+}
+.stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+}
+.stat-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.stat-val {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-lab {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

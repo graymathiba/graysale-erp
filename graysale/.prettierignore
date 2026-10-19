@@ -1,0 +1,12 @@
+# Never format dependency trees or lockfiles
+node_modules/
+package-lock.json
+
+# Build + runtime artifacts
+dist/
+web/dist/
+build/
+.dart_tool/
+*.db
+*.db-wal
+*.db-shm

@@ -32,7 +32,10 @@ export default function CompanyProfilePage() {
       try {
         const p = await api.get('/tenant/profile');
         setForm({ ...EMPTY, ...p });
-      } catch (e) { if (e?.silent) return; toast.err(e.message); }
+      } catch (e) {
+        if (e?.silent) return;
+        toast.err(e.message);
+      }
     })();
   }, []);
 
@@ -85,34 +88,82 @@ export default function CompanyProfilePage() {
 
       <form onSubmit={save}>
         <div className="panel">
-          <div className="panel-hd"><span>Business Details</span></div>
+          <div className="panel-hd">
+            <span>Business Details</span>
+          </div>
           <div className="form-grid">
-            <div className="field"><label>Company trading name</label><input value={form.company_name} onChange={(e) => set('company_name', e.target.value)} required /></div>
-            <div className="field"><label>Trading as (T/A)</label><input value={form.trading_as} onChange={(e) => set('trading_as', e.target.value)} /></div>
-            <div className="field" style={{ gridColumn: '1 / -1' }}><label>Business address</label><input value={form.address} onChange={(e) => set('address', e.target.value)} /></div>
-            <div className="field"><label>Telephone</label><input value={form.telephone} onChange={(e) => set('telephone', e.target.value)} /></div>
-            <div className="field"><label>Cell / Mobile</label><input value={form.mobile} onChange={(e) => set('mobile', e.target.value)} /></div>
+            <div className="field">
+              <label>Company trading name</label>
+              <input value={form.company_name} onChange={(e) => set('company_name', e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>Trading as (T/A)</label>
+              <input value={form.trading_as} onChange={(e) => set('trading_as', e.target.value)} />
+            </div>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <label>Business address</label>
+              <input value={form.address} onChange={(e) => set('address', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Telephone</label>
+              <input value={form.telephone} onChange={(e) => set('telephone', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Cell / Mobile</label>
+              <input value={form.mobile} onChange={(e) => set('mobile', e.target.value)} />
+            </div>
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-hd"><span>Owner Login Details</span></div>
+          <div className="panel-hd">
+            <span>Owner Login Details</span>
+          </div>
           <div className="form-grid">
-            <div className="field"><label>Owner username</label><input value={form.owner_username} onChange={(e) => set('owner_username', e.target.value)} required autoComplete="username" /></div>
-            <div className="field"><label>Owner email</label><input type="email" value={form.owner_email} onChange={(e) => set('owner_email', e.target.value)} required /></div>
+            <div className="field">
+              <label>Owner username</label>
+              <input
+                value={form.owner_username}
+                onChange={(e) => set('owner_username', e.target.value)}
+                required
+                autoComplete="username"
+              />
+            </div>
+            <div className="field">
+              <label>Owner email</label>
+              <input
+                type="email"
+                value={form.owner_email}
+                onChange={(e) => set('owner_email', e.target.value)}
+                required
+              />
+            </div>
           </div>
 
           <div className="panel-bd" style={{ borderTop: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 12px' }}>Change password <span style={{ fontWeight: 500, color: 'var(--faint)' }}>(optional)</span></h3>
+            <h3 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 12px' }}>
+              Change password <span style={{ fontWeight: 500, color: 'var(--faint)' }}>(optional)</span>
+            </h3>
             <div className="form-grid">
               <div className="field">
                 <label>New password</label>
-                <input type="password" placeholder="Leave blank to keep existing password" value={form.new_password} onChange={(e) => set('new_password', e.target.value)} autoComplete="new-password" />
+                <input
+                  type="password"
+                  placeholder="Leave blank to keep existing password"
+                  value={form.new_password}
+                  onChange={(e) => set('new_password', e.target.value)}
+                  autoComplete="new-password"
+                />
               </div>
               {form.new_password && (
                 <div className="field">
                   <label>Current password</label>
-                  <input type="password" value={form.current_password} onChange={(e) => set('current_password', e.target.value)} autoComplete="current-password" />
+                  <input
+                    type="password"
+                    value={form.current_password}
+                    onChange={(e) => set('current_password', e.target.value)}
+                    autoComplete="current-password"
+                  />
                 </div>
               )}
             </div>

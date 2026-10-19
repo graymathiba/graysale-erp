@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp, seedCatalog, admin } from './helpers.js';
 import { AccountingService } from '../src/services/accounting.js';
@@ -12,8 +12,12 @@ test('arbitrary balanced journal entry posts and shows in ledger', () => {
   const app = makeApp();
   const e = app.accounting.postEntry({
     date: '2026-09-01',
-    description: 'test', reference: 'X',
-    lines: [{ code: '1000', amount: 1000 }, { code: '4000', amount: 1000 }],
+    description: 'test',
+    reference: 'X',
+    lines: [
+      { code: '1000', amount: 1000 },
+      { code: '4000', amount: 1000 },
+    ],
     user: admin(app),
   });
   assert.ok(e.id);
@@ -23,16 +27,30 @@ test('arbitrary balanced journal entry posts and shows in ledger', () => {
 
 test('unbalanced entry is rejected', () => {
   const app = makeApp();
-  assert.throws(() => app.accounting.postEntry({
-    date: '2026-09-01', description: 'bad', reference: 'B',
-    lines: [{ code: '1000', amount: 1000 }, { code: '4000', amount: 900 }], user: admin(app),
-  }), /UNBALANCED/);
+  assert.throws(
+    () =>
+      app.accounting.postEntry({
+        date: '2026-09-01',
+        description: 'bad',
+        reference: 'B',
+        lines: [
+          { code: '1000', amount: 1000 },
+          { code: '4000', amount: 900 },
+        ],
+        user: admin(app),
+      }),
+    /UNBALANCED/,
+  );
 });
 
 test('trial balance totals equal and balance sheet balances', () => {
   const app = makeApp();
   const { A } = seedCatalog(app);
-  app.pos.checkout({ items: [{ productId: A.id, qty: 1 }], payments: [{ method: 'CASH', amount: 99999 }], user: admin(app) });
+  app.pos.checkout({
+    items: [{ productId: A.id, qty: 1 }],
+    payments: [{ method: 'CASH', amount: 99999 }],
+    user: admin(app),
+  });
 
   const tb = app.accounting.trialBalance();
   const d = tb.reduce((s, x) => s + (x.debits || 0), 0);
@@ -45,7 +63,11 @@ test('trial balance totals equal and balance sheet balances', () => {
 test('P&L reflects revenue and COGS', () => {
   const app = makeApp();
   const { A } = seedCatalog(app);
-  app.pos.checkout({ items: [{ productId: A.id, qty: 1 }], payments: [{ method: 'CASH', amount: 99999 }], user: admin(app) });
+  app.pos.checkout({
+    items: [{ productId: A.id, qty: 1 }],
+    payments: [{ method: 'CASH', amount: 99999 }],
+    user: admin(app),
+  });
   const pl = app.accounting.profitAndLoss();
   assert.equal(pl.revenue, 4500);
   assert.equal(pl.expenses, 2000);

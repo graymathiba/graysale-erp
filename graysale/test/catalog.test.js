@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp, seedCatalog, standardTax } from './helpers.js';
 
@@ -37,7 +37,7 @@ test('stock movements move qty and record history', () => {
   assert.equal(app.catalog.qtyOnHand(A.id).qty_on_hand, 15);
   const movs = app.catalog.movements({ productId: A.id });
   assert.equal(movs.length, 2);
-  assert.ok(movs.every(m => m.product_id === A.id));
+  assert.ok(movs.every((m) => m.product_id === A.id));
 });
 
 test('reserve/release affects available but not on-hand', () => {
@@ -67,8 +67,49 @@ test('product updates persist and validate active flag', () => {
   assert.equal(p.active, 0);
 });
 
+test('product updates accept boolean flags and serialize them to 0/1', () => {
+  const app = makeApp();
+  const { A } = seedCatalog(app);
+  app.catalog.updateProduct(A.id, { serialTracked: true, active: false, reorderLevel: 3 });
+  const p = app.catalog.getProduct(A.id);
+  assert.equal(p.serial_tracked, 1);
+  assert.equal(p.active, 0);
+  assert.equal(p.reorder_level, 3);
+});
+
 test('standard tax class seeded at 15%', () => {
   const app = makeApp();
   const st = standardTax(app);
   assert.equal(st.rate_bps, 1500);
+});
+
+test('empty-string FK references are treated as unset (no FK violation)', () => {
+  const app = makeApp();
+  const p = app.catalog.createProduct({ sku: 'EMPTY-CAT', name: 'No category', categoryId: '', barcode: '' });
+  assert.equal(p.category_id, null);
+  assert.equal(p.barcode, null);
+  const { A } = seedCatalog(app);
+  app.catalog.updateProduct(A.id, { categoryId: '', priceCents: 5500 });
+  const updated = app.catalog.getProduct(A.id);
+  assert.equal(updated.category_id, null);
+  assert.equal(updated.price_cents, 5500);
+});
+
+test('create honours the active flag and seeds bundle components on first save', () => {
+  const app = makeApp();
+  const { A } = seedCatalog(app);
+  const hidden = app.catalog.createProduct({ sku: 'HIDDEN', name: 'Hidden', active: false });
+  assert.equal(hidden.active, 0);
+
+  // Components may be addressed by SKU as well as by id, and must survive
+  // the initial create (not only a follow-up edit).
+  const kit = app.catalog.createProduct({
+    sku: 'KIT-1',
+    name: 'Starter kit',
+    bundleComponents: [{ componentProductId: A.sku, qtyRequired: 2 }],
+  });
+  assert.equal(kit.is_bundle, true);
+  assert.equal(kit.bundle_components.length, 1);
+  assert.equal(kit.bundle_components[0].component_product_id, A.id);
+  assert.equal(kit.bundle_components[0].qty_required, 2);
 });

@@ -5,7 +5,11 @@ export default function UsersPage() {
   const { can } = useAuth();
 
   if (!can('users.manage')) {
-    return <div className="panel"><div className="empty-state">You do not have permission to manage users.</div></div>;
+    return (
+      <div className="panel">
+        <div className="empty-state">You do not have permission to manage users.</div>
+      </div>
+    );
   }
 
   return (

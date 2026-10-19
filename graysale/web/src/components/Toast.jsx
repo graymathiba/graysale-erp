@@ -42,7 +42,9 @@ export function ToastProvider({ children }) {
       {children}
       <div id="toast-wrap">
         {toasts.map((t) => (
-          <div key={t.key} className={`toast ${t.kind}`}>{t.msg}</div>
+          <div key={t.key} className={`toast ${t.kind}`}>
+            {t.msg}
+          </div>
         ))}
       </div>
     </ToastContext.Provider>

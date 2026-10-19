@@ -9,24 +9,40 @@ export default function PlatformMetrics() {
 
   useEffect(() => {
     (async () => {
-      try { setM(await api.get('/superadmin/overview')); }
-      catch (e) { if (!e?.silent) toast.err(e.message); }
+      try {
+        setM(await api.get('/superadmin/overview'));
+      } catch (e) {
+        if (!e?.silent) toast.err(e.message);
+      }
     })();
   }, []);
 
-  if (!m) return <div className="loader"><span className="spinner" />Loading…</div>;
+  if (!m)
+    return (
+      <div className="loader">
+        <span className="spinner" />
+        Loading…
+      </div>
+    );
 
   return (
     <div className="ct-metrics">
       <div className="stat-cards">
-        <Stat k="Active Companies" v={m.activeCompanies ?? 0} d={`${m.totalCompanies ?? 0} onboarded platforms`} tone="green" />
+        <Stat
+          k="Active Companies"
+          v={m.activeCompanies ?? 0}
+          d={`${m.totalCompanies ?? 0} onboarded platforms`}
+          tone="green"
+        />
         <Stat k="Blocked Instances" v={m.blockedInstances ?? 0} d="Access suspended by admin" tone="red" />
         <Stat k="Expired Accounts" v={m.expiredAccounts ?? 0} d="License lapsed — renewal needed" tone="amber" />
         <Stat k="Pending Activation" v={m.pendingKeys ?? 0} d="Awaiting a product key" tone="violet" />
       </div>
 
       <div className="panel">
-        <div className="panel-hd"><span>Product key inventory</span></div>
+        <div className="panel-hd">
+          <span>Product key inventory</span>
+        </div>
         <div className="ct-key-stats">
           <KStat k="Generated" v={m.totalGenerated ?? 0} tone="violet" />
           <KStat k="Redeemed" v={m.redeemed ?? 0} tone="green" />
@@ -40,7 +56,9 @@ export default function PlatformMetrics() {
           />
         </div>
         <div className="ct-progress-caption">
-          <span>{m.redeemed ?? 0} of {m.totalGenerated ?? 0} keys redeemed</span>
+          <span>
+            {m.redeemed ?? 0} of {m.totalGenerated ?? 0} keys redeemed
+          </span>
         </div>
       </div>
     </div>

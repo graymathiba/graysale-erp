@@ -1,16 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
-import {
-  printReceipt,
-  writeSerial,
-  requestSerialPort,
-  getMemorySerialPort,
-} from '../lib/thermalPrinter';
+import { printReceipt, writeSerial, requestSerialPort, getMemorySerialPort } from '../lib/thermalPrinter';
 
 /**
  * usePOSHardware — workstation I/O for the classic POS terminal.
  *
- *  * Global keydown listeners: F2 (Save), F3 (Print), F4 (Hold/Recall),
- *    F5 (Pay), Delete (remove row), Enter/Arrows (navigate/process), Escape.
+ *  * Global keydown listeners: F2/F5 (Pay), F3 (Print), F4 (Hold/Recall),
+ *    Delete (remove row), Enter/Arrows (navigate/process), Escape.
  *  * Hardware barcode-scanner buffer: printable keys typed outside an editable
  *    field accumulate; a terminal Enter commits the buffer as a scan code.
  *  * ESC/POS thermal printing (Web Serial / Web USB, window.print fallback)
@@ -54,7 +49,10 @@ export default function usePOSHardware({ onCommand, onScan } = {}) {
       }
 
       // Row navigation is only interesting outside text fields.
-      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !editable) {
+      if (
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        !editable
+      ) {
         e.preventDefault();
         onCommandRef.current?.(e.key);
         return;
@@ -113,8 +111,13 @@ export default function usePOSHardware({ onCommand, onScan } = {}) {
     if (portRef.current) return portRef.current;
     try {
       const existing = await getMemorySerialPort();
-      if (existing) { portRef.current = existing; return existing; }
-    } catch { /* no persisted grants */ }
+      if (existing) {
+        portRef.current = existing;
+        return existing;
+      }
+    } catch {
+      /* no persisted grants */
+    }
     const p = await requestSerialPort();
     portRef.current = p;
     return p;
@@ -135,7 +138,11 @@ export default function usePOSHardware({ onCommand, onScan } = {}) {
   const openCashDrawer = useCallback(async () => {
     let port = null;
     if ('serial' in navigator) {
-      try { port = await ensurePort(); } catch { port = null; }
+      try {
+        port = await ensurePort();
+      } catch {
+        port = null;
+      }
     }
     if (port) {
       const kick = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa, 0x1b, 0x64, 0x02]);

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp } from './helpers.js';
 import { hashPassword, verifyPassword } from '../src/services/auth.js';
@@ -21,7 +21,10 @@ test('default admin can log in and has all capabilities', () => {
 
 test('wrong credentials are rejected', () => {
   const app = makeApp();
-  assert.deepEqual(app.auth.login({ username: 'admin', password: 'wrong' }), { ok: false, error: 'INVALID_CREDENTIALS' });
+  assert.deepEqual(app.auth.login({ username: 'admin', password: 'wrong' }), {
+    ok: false,
+    error: 'INVALID_CREDENTIALS',
+  });
 });
 
 test('userForToken resolves logged-in sessions and expires cleanly', () => {
@@ -35,7 +38,7 @@ test('userForToken resolves logged-in sessions and expires cleanly', () => {
 test('roles grant the documented capability matrix', () => {
   const app = makeApp();
   const sheriff = app.auth.createUser({ username: 'cashier1', password: 'pw', fullName: 'Cashier', role: 'cashier' });
-  const user = app.auth.listUsers().find(u => u.id === sheriff);
+  const user = app.auth.listUsers().find((u) => u.id === sheriff);
   assert.equal(app.auth.hasPermission({ ...user, role: 'cashier' }, 'pos.sell'), true);
   assert.equal(app.auth.hasPermission({ ...user, role: 'cashier' }, 'catalog.manage'), false);
   assert.equal(app.auth.hasPermission({ ...user, role: 'cashier' }, 'accounting.view'), false);

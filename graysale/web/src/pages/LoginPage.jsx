@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../api/AuthContext';
 import { useToast } from '../components/Toast';
 
@@ -17,7 +17,11 @@ export default function LoginPage() {
     setErr('');
     setBusy(true);
     try {
-      const { user: u, tenant } = await login(username, password);
+      const { user: u, tenant, requiresPasswordChange } = await login(username, password);
+      if (requiresPasswordChange) {
+        navigate('/set-password', { replace: true });
+        return;
+      }
       if (tenant?.needsActivation) {
         toast.ok(`Welcome, ${u.fullName || u.username}`);
         navigate('/activate-license');
@@ -35,7 +39,9 @@ export default function LoginPage() {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand-mark" style={{ display: 'flex' }}>GS</div>
+        <div className="brand-mark" style={{ display: 'flex' }}>
+          GS
+        </div>
         <h1>GraySale ERP</h1>
         <p className="sub">Retail Point of Sale &amp; Accounting</p>
         <div className="field">
@@ -44,12 +50,22 @@ export default function LoginPage() {
         </div>
         <div className="field">
           <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
         </div>
         <div className="login-err">{err}</div>
         <button className="btn btn-primary btn-lg" style={{ width: '100%' }} disabled={busy}>
           {busy ? 'Signing in…' : 'Log In'}
         </button>
+        <p style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)', textAlign: 'center' }}>
+          <Link to="/register" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+            Create an Account
+          </Link>
+        </p>
       </form>
     </div>
   );

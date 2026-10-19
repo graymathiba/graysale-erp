@@ -39,8 +39,18 @@ export default function DynamicDocumentPrint({ companySettings = {}, documentDat
           <div className="doc-title-type">{docType}</div>
           <div className="doc-title-no">#{docNumber || customerName}</div>
           <div className="doc-meta">
-            {date && <div><span>Date:</span><span>{date}</span></div>}
-            {dueDate && <div><span>:</span><span>{dueDate}</span></div>}
+            {date && (
+              <div>
+                <span>Date:</span>
+                <span>{date}</span>
+              </div>
+            )}
+            {dueDate && (
+              <div>
+                <span>:</span>
+                <span>{dueDate}</span>
+              </div>
+            )}
           </div>
           <div className="doc-balance">
             <span>Balance Due:</span>
@@ -80,7 +90,10 @@ export default function DynamicDocumentPrint({ companySettings = {}, documentDat
       </table>
 
       <div className="doc-total">
-        <div><span>Total:</span><span>{fmt(totalAmount)}</span></div>
+        <div>
+          <span>Total:</span>
+          <span>{fmt(totalAmount)}</span>
+        </div>
       </div>
 
       {/* Banking + statutory */}

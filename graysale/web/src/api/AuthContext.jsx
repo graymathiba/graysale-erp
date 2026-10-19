@@ -7,13 +7,25 @@ const AuthContext = createContext(null);
 const CAPABILITIES = {
   owner: ['*'],
   manager: [
-    'pos.sell', 'pos.refund', 'pos.layaway', 'pos.quote',
-    'catalog.manage', 'inventory.adjust',
-    'customers.manage', 'suppliers.manage',
-    'purchasing.manage', 'invoicing.manage',
-    'accounting.view', 'accounting.post',
-    'reports.view', 'eod.self', 'eod.run',
-    'users.view', 'users.manage', 'users.delete', 'settings.manage',
+    'pos.sell',
+    'pos.refund',
+    'pos.layaway',
+    'pos.quote',
+    'catalog.manage',
+    'inventory.adjust',
+    'customers.manage',
+    'suppliers.manage',
+    'purchasing.manage',
+    'invoicing.manage',
+    'accounting.view',
+    'accounting.post',
+    'reports.view',
+    'eod.self',
+    'eod.run',
+    'users.view',
+    'users.manage',
+    'users.delete',
+    'settings.manage',
   ],
   accountant: ['accounting.view', 'accounting.post', 'reports.view', 'eod.view'],
   cashier: ['pos.sell', 'pos.refund', 'pos.layaway', 'eod.self'],
@@ -28,10 +40,15 @@ export function AuthProvider({ children }) {
     if (authStore.token && !authStore.user) {
       fetchMe()
         .then(({ user: u, tenant: t }) => {
-          setUser(u); setTenant(t);
+          setUser(u);
+          setTenant(t);
           authStore.set({ token: authStore.token, user: u, tenant: t });
         })
-        .catch(() => { authStore.clear(); setUser(null); setTenant(null); })
+        .catch(() => {
+          authStore.clear();
+          setUser(null);
+          setTenant(null);
+        })
         .finally(() => setReady(true));
     } else {
       setReady(true);
@@ -39,20 +56,28 @@ export function AuthProvider({ children }) {
 
     // Central HTTP client signals a stale/expired session (single-shot).
     // Nulling the user drops every protected route back to /login.
-    const onUnauthorized = () => { authStore.clear(); setUser(null); setTenant(null); };
+    const onUnauthorized = () => {
+      authStore.clear();
+      setUser(null);
+      setTenant(null);
+    };
     window.addEventListener('app:unauthorized', onUnauthorized);
     return () => window.removeEventListener('app:unauthorized', onUnauthorized);
   }, []);
 
   const login = useCallback(async (u, p) => {
-    const { user: usr, tenant: tnt } = await apiLogin(u, p);
+    const { user: usr, tenant: tnt, requiresPasswordChange } = await apiLogin(u, p);
     setUser(usr);
     setTenant(tnt);
-    return { user: usr, tenant: tnt };
+    return { user: usr, tenant: tnt, requiresPasswordChange };
   }, []);
 
   const logout = useCallback(async () => {
-    try { await api.post('/auth/logout'); } catch { /* ignore */ }
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      /* ignore */
+    }
     authStore.clear();
     setUser(null);
     setTenant(null);
@@ -63,7 +88,8 @@ export function AuthProvider({ children }) {
   // immediately in the UI.
   const refreshTenant = useCallback(async () => {
     const { user: u, tenant: t } = await fetchMe();
-    setUser(u); setTenant(t);
+    setUser(u);
+    setTenant(t);
     authStore.set({ token: authStore.token, user: u, tenant: t });
     return t;
   }, []);
@@ -73,13 +99,16 @@ export function AuthProvider({ children }) {
   const needsActivation = !!tenant && ['PENDING_KEY', 'PENDING_ACTIVATION', 'BLOCKED'].includes(tenant.status);
 
   // capability check, honoring the backend's '*' wildcard.
-  const can = useCallback((cap) => {
-    if (!user) return false;
-    const perms = CAPABILITIES[user.role];
-    if (!perms) return false;
-    if (perms.includes('*')) return true;
-    return perms.includes(cap);
-  }, [user]);
+  const can = useCallback(
+    (cap) => {
+      if (!user) return false;
+      const perms = CAPABILITIES[user.role];
+      if (!perms) return false;
+      if (perms.includes('*')) return true;
+      return perms.includes(cap);
+    },
+    [user],
+  );
 
   const isAdmin = !!user && (user.role === 'owner' || user.role === 'manager');
   const isCashier = !!user && user.role === 'cashier';
@@ -87,7 +116,23 @@ export function AuthProvider({ children }) {
   const isSuperAdmin = !!user && user.isSuperAdmin === true;
 
   return (
-    <AuthContext.Provider value={{ user, tenant, ready, login, logout, can, isAdmin, isCashier, isSuperAdmin, needsActivation, refreshTenant, setUser, setTenant }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        tenant,
+        ready,
+        login,
+        logout,
+        can,
+        isAdmin,
+        isCashier,
+        isSuperAdmin,
+        needsActivation,
+        refreshTenant,
+        setUser,
+        setTenant,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

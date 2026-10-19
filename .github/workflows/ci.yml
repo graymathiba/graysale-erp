@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: graysale
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            graysale/package-lock.json
+            graysale/web/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Audit backend dependencies
+        run: npm audit --audit-level=high
+
+      - name: Backend tests (with coverage)
+        run: npm run test:coverage
+
+      - name: Install web dependencies
+        run: npm --prefix web ci
+
+      - name: Audit web dependencies
+        run: npm --prefix web audit --audit-level=high
+
+      - name: Web tests
+        run: npm --prefix web run test
+
+      - name: Build web
+        run: npm run build:web

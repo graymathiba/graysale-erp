@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../src/app.js';
 
+// Keep per-request logs out of the TAP output. Set before any HTTP test
+// dispatches its first request.
+process.env.LOG_REQUESTS = '0';
+
 // Fresh isolated app + DB for every call.
 export function makeApp() {
   const dir = mkdtempSync(join(tmpdir(), 'graysale-test-'));
@@ -14,7 +18,7 @@ export function admin(app) {
 }
 
 export function standardTax(app) {
-  return app.catalog.taxClasses().find(t => t.name === 'Standard');
+  return app.catalog.taxClasses().find((t) => t.name === 'Standard');
 }
 
 // A ready catalog: A (within margins) and B (low) products.
@@ -22,12 +26,26 @@ export function seedCatalog(app, opts = {}) {
   const catId = app.catalog.createCategory('Groceries');
   const tx = standardTax(app);
   const A = app.catalog.createProduct({
-    sku: 'A001', barcode: '6000000000001', name: 'Product A', categoryId: catId,
-    unit: 'each', costCents: 2000, priceCents: 4500, taxClassId: tx.id, reorderLevel: 5,
+    sku: 'A001',
+    barcode: '6000000000001',
+    name: 'Product A',
+    categoryId: catId,
+    unit: 'each',
+    costCents: 2000,
+    priceCents: 4500,
+    taxClassId: tx.id,
+    reorderLevel: 5,
   });
   const B = app.catalog.createProduct({
-    sku: 'B001', barcode: '6000000000002', name: 'Product B', categoryId: catId,
-    unit: 'each', costCents: 900, priceCents: 1400, taxClassId: tx.id, reorderLevel: 5,
+    sku: 'B001',
+    barcode: '6000000000002',
+    name: 'Product B',
+    categoryId: catId,
+    unit: 'each',
+    costCents: 900,
+    priceCents: 1400,
+    taxClassId: tx.id,
+    reorderLevel: 5,
   });
   const aQty = opts.aQty ?? 10;
   const bQty = opts.bQty ?? 10;

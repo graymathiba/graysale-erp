@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp, seedCatalog, customer, admin, assertBalanced } from './helpers.js';
-import { createHttpServer, matchRoute } from '../src/http/routes.js';
 
 // ---------- User management / RBAC ----------
 test('users can be deactivated (soft-delete) and reactivated', () => {
@@ -23,10 +22,14 @@ test('a user with an OPEN shift containing transactions cannot be deleted', () =
   const { A } = seedCatalog(app);
   const owner = admin(app);
   const id = app.auth.createUser({ username: 'cashier1', password: 'pw', role: 'cashier' });
-  const cashier = app.auth.listUsers().find(u => u.id === id);
+  const cashier = app.auth.listUsers().find((u) => u.id === id);
 
   const sh = app.eod.open({ user: cashier, openingCashCents: 0 });
-  app.pos.checkout({ items: [{ productId: A.id, qty: 1 }], payments: [{ method: 'CASH', amount: 6000 }], user: cashier });
+  app.pos.checkout({
+    items: [{ productId: A.id, qty: 1 }],
+    payments: [{ method: 'CASH', amount: 6000 }],
+    user: cashier,
+  });
 
   assert.ok(app.auth.openShiftInUse(id), 'open shift with transactions should be flagged');
   assert.throws(() => app.auth.deleteUser(id, owner), /USER_HAS_OPEN_SHIFT/);
@@ -34,7 +37,10 @@ test('a user with an OPEN shift containing transactions cannot be deleted', () =
   // Closing the shift frees the user for deletion.
   app.eod.zReport(sh.id, { user: cashier });
   app.auth.deleteUser(id, owner);
-  assert.equal(app.auth.listUsers().find(u => u.id === id), undefined);
+  assert.equal(
+    app.auth.listUsers().find((u) => u.id === id),
+    undefined,
+  );
 });
 
 test('cannot delete yourself or another owner', () => {
@@ -48,7 +54,7 @@ test('cannot delete yourself or another owner', () => {
 test('cashier is blocked from user management and accounting; granted POS + EOD self-report', () => {
   const app = makeApp();
   const id = app.auth.createUser({ username: 'cashier2', password: 'pw', role: 'cashier' });
-  const cashier = app.auth.listUsers().find(u => u.id === id);
+  const cashier = app.auth.listUsers().find((u) => u.id === id);
   assert.equal(app.auth.hasPermission(cashier, 'pos.sell'), true);
   assert.equal(app.auth.hasPermission(cashier, 'eod.self'), true);
   assert.equal(app.auth.hasPermission(cashier, 'accounting.view'), false);
@@ -57,7 +63,7 @@ test('cashier is blocked from user management and accounting; granted POS + EOD 
   assert.equal(app.auth.hasPermission(cashier, 'accounting.post'), false);
   // manager is an admin for user management/deletion
   const mgrId = app.auth.createUser({ username: 'mgr', password: 'pw', role: 'manager' });
-  const mgr = app.auth.listUsers().find(u => u.id === mgrId);
+  const mgr = app.auth.listUsers().find((u) => u.id === mgrId);
   assert.equal(app.auth.hasPermission(mgr, 'users.delete'), true);
 });
 

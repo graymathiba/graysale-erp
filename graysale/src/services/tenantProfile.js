@@ -23,22 +23,31 @@ export class TenantProfileService {
   }
 
   _tenant(tenantId) {
-    return this.db.prepare('SELECT id, company_name, owner_email, status FROM tenants WHERE id = ?').get(tenantId) || null;
+    return (
+      this.db.prepare('SELECT id, company_name, owner_email, status FROM tenants WHERE id = ?').get(tenantId) || null
+    );
   }
 
   _owner(tenantId) {
-    return this.db.prepare(
-      "SELECT id, username, password_hash, full_name, role, active FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1"
-    ).get(tenantId) || null;
+    return (
+      this.db
+        .prepare(
+          "SELECT id, username, password_hash, full_name, role, active FROM users WHERE tenant_id = ? AND role = 'owner' LIMIT 1",
+        )
+        .get(tenantId) || null
+    );
   }
 
   // Merge the profile save into the (shared, id=1) company_settings row the
   // same way CompanySettingsService does, so business fields always persist
   // even when the row did not exist yet.
   _mergeBusiness(payload, tenant, companyName) {
-    const cur = this.db.prepare(
-      'SELECT company_name, trading_as, address, telephone, mobile, reg_number, tin_number, vat_number FROM company_settings WHERE id = 1 AND tenant_id = ?'
-    ).get(tenant) || {};
+    const cur =
+      this.db
+        .prepare(
+          'SELECT company_name, trading_as, address, telephone, mobile, reg_number, tin_number, vat_number FROM company_settings WHERE id = 1 AND tenant_id = ?',
+        )
+        .get(tenant) || {};
     const next = { company_name: cur.company_name || '' };
     for (const f of BUSINESS_FIELDS) next[f] = cur[f] || '';
     if (companyName !== undefined) next.company_name = companyName;
@@ -49,11 +58,13 @@ export class TenantProfileService {
   }
 
   _upsertBusiness(tenant, next) {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO company_settings (
         id, company_name, trading_as, address, telephone, mobile, reg_number, tin_number, vat_number,
         updated_at, tenant_id
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'), ?)
       ON CONFLICT(id) DO UPDATE SET
         company_name = excluded.company_name,
         trading_as = excluded.trading_as,
@@ -63,21 +74,33 @@ export class TenantProfileService {
         reg_number = excluded.reg_number,
         tin_number = excluded.tin_number,
         vat_number = excluded.vat_number,
-        updated_at = datetime('now'),
+        updated_at = datetime('now','localtime'),
         tenant_id = excluded.tenant_id
-    `).run(
-      next.company_name, next.trading_as, next.address, next.telephone,
-      next.mobile, next.reg_number, next.tin_number, next.vat_number, tenant,
-    );
+    `,
+      )
+      .run(
+        next.company_name,
+        next.trading_as,
+        next.address,
+        next.telephone,
+        next.mobile,
+        next.reg_number,
+        next.tin_number,
+        next.vat_number,
+        tenant,
+      );
   }
 
   get(tenantId) {
     const tenant = resolveTenantId(this.db, tenantId);
     const t = this._tenant(tenant);
     if (!t) throw notFound('TENANT_NOT_FOUND');
-    const cs = this.db.prepare(
-      'SELECT trading_as, address, telephone, mobile, reg_number, tin_number, vat_number FROM company_settings WHERE id = 1 AND tenant_id = ?'
-    ).get(tenant) || {};
+    const cs =
+      this.db
+        .prepare(
+          'SELECT trading_as, address, telephone, mobile, reg_number, tin_number, vat_number FROM company_settings WHERE id = 1 AND tenant_id = ?',
+        )
+        .get(tenant) || {};
     const owner = this._owner(tenant);
     return {
       tenantId: t.id,
@@ -134,7 +157,9 @@ export class TenantProfileService {
     let newPassword = null;
     if (payload.new_password && String(payload.new_password).length > 0) {
       if (!payload.current_password) throw badRequest('CURRENT_PASSWORD_REQUIRED');
-      const stored = this.db.prepare('SELECT password_hash FROM users WHERE id = ? AND tenant_id = ?').get(actor.id, tenant);
+      const stored = this.db
+        .prepare('SELECT password_hash FROM users WHERE id = ? AND tenant_id = ?')
+        .get(actor.id, tenant);
       if (!stored || !verifyPassword(payload.current_password, stored.password_hash)) {
         throw badRequest('INVALID_CURRENT_PASSWORD');
       }
@@ -148,9 +173,9 @@ export class TenantProfileService {
     const nextBusiness = this._mergeBusiness(payload, tenant, companyName);
 
     return tx(this.db, () => {
-      this.db.prepare(
-        "UPDATE tenants SET company_name = ?, owner_email = ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(companyName, ownerEmail, tenant);
+      this.db
+        .prepare("UPDATE tenants SET company_name = ?, owner_email = ?, updated_at = datetime('now','localtime') WHERE id = ?")
+        .run(companyName, ownerEmail, tenant);
       if (companyName !== t.company_name) changed.push('company_name');
       if (ownerEmail !== t.owner_email) changed.push('owner_email');
 
@@ -160,12 +185,15 @@ export class TenantProfileService {
       }
 
       if (newUsername !== owner.username) {
-        this.db.prepare('UPDATE users SET username = ? WHERE id = ? AND tenant_id = ?').run(newUsername, owner.id, tenant);
+        this.db
+          .prepare('UPDATE users SET username = ? WHERE id = ? AND tenant_id = ?')
+          .run(newUsername, owner.id, tenant);
         changed.push('username');
       }
 
       if (newPassword) {
-        this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND tenant_id = ?')
+        this.db
+          .prepare('UPDATE users SET password_hash = ? WHERE id = ? AND tenant_id = ?')
           .run(hashPassword(newPassword), owner.id, tenant);
         // Invalidate any existing owner sessions so stale passwords are useless.
         this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(owner.id);
@@ -186,8 +214,10 @@ export class TenantProfileService {
     if (!t) return null;
     const owner = this._owner(tenant);
 
-    if (payload.company_name !== undefined && !String(payload.company_name).trim()) throw badRequest('COMPANY_NAME_REQUIRED');
-    if (payload.owner_email !== undefined && !String(payload.owner_email).trim()) throw badRequest('OWNER_EMAIL_REQUIRED');
+    if (payload.company_name !== undefined && !String(payload.company_name).trim())
+      throw badRequest('COMPANY_NAME_REQUIRED');
+    if (payload.owner_email !== undefined && !String(payload.owner_email).trim())
+      throw badRequest('OWNER_EMAIL_REQUIRED');
 
     const companyName = payload.company_name !== undefined ? String(payload.company_name).trim() : t.company_name;
     const ownerEmail = payload.owner_email !== undefined ? String(payload.owner_email).trim() : t.owner_email;
@@ -197,7 +227,10 @@ export class TenantProfileService {
       newUsername = String(payload.owner_username).trim();
       if (!newUsername) throw badRequest('USERNAME_REQUIRED');
       if (!owner) throw notFound('TENANT_OWNER_NOT_FOUND');
-      if (newUsername !== owner.username && this.db.prepare('SELECT id FROM users WHERE username = ?').get(newUsername)) {
+      if (
+        newUsername !== owner.username &&
+        this.db.prepare('SELECT id FROM users WHERE username = ?').get(newUsername)
+      ) {
         throw conflict(`DUPLICATE_USERNAME: ${newUsername}`);
       }
     }
@@ -210,20 +243,23 @@ export class TenantProfileService {
     const wantsPassword = !!payload.new_password && String(payload.new_password).length > 0;
 
     tx(this.db, () => {
-      this.db.prepare(
-        "UPDATE tenants SET company_name = ?, owner_email = ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(companyName, ownerEmail, tenant);
+      this.db
+        .prepare("UPDATE tenants SET company_name = ?, owner_email = ?, updated_at = datetime('now','localtime') WHERE id = ?")
+        .run(companyName, ownerEmail, tenant);
 
       if (csSets.length) {
         this._upsertBusiness(tenant, nextBusiness);
       }
 
       if (owner && newUsername !== owner.username) {
-        this.db.prepare('UPDATE users SET username = ? WHERE id = ? AND tenant_id = ?').run(newUsername, owner.id, tenant);
+        this.db
+          .prepare('UPDATE users SET username = ? WHERE id = ? AND tenant_id = ?')
+          .run(newUsername, owner.id, tenant);
       }
       if (wantsPassword) {
         if (!owner) throw notFound('TENANT_OWNER_NOT_FOUND');
-        this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND tenant_id = ?')
+        this.db
+          .prepare('UPDATE users SET password_hash = ? WHERE id = ? AND tenant_id = ?')
           .run(hashPassword(String(payload.new_password)), owner.id, tenant);
         this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(owner.id);
       }

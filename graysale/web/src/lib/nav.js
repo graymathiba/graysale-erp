@@ -22,6 +22,7 @@ export const NAV_GROUPS = [
     items: [
       { key: 'company-profile', label: 'My Profile', route: '/company-profile', cap: 'settings.manage' },
       { key: 'company', label: 'Company Profile', route: '/company', cap: 'settings.manage' },
+      { key: 'storage', label: 'Data Storage', route: '/storage' },
       { key: 'settings', label: 'Settings', route: '/settings', cap: 'settings.manage' },
       { key: 'users', label: 'User Management', route: '/users', cap: 'users.manage' },
       { key: 'support', label: 'Support', route: '/support' },

@@ -1,0 +1,192 @@
+/* Tables, data cells, thumbnails, link actions (split from theme.css — keep order in sync via theme.css @imports) */
+/* ---------- Tables ---------- */
+.grid-wrap {
+  overflow-x: auto;
+}
+.grid {
+  font-size: 13px;
+}
+.grid thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.grid tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--surface-3);
+  vertical-align: middle;
+}
+.grid tbody tr:hover {
+  background: #f8fafc;
+}
+.grid.zebra tbody tr:nth-child(even) {
+  background: #fafcff;
+}
+.grid .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.grid tbody tr.clickable {
+  cursor: pointer;
+}
+.muted {
+  color: var(--muted);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+/* Monospace + tabular figures for money, doc numbers, quantities and IDs.
+   Lives here (not in pos-terminal.css) because .mono is used app-wide. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Product thumbnail placeholder ---------- */
+.p-img {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.p-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.p-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-l), var(--accent-l2));
+  color: var(--accent-d);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  border: 1px solid var(--accent-l2);
+  text-transform: uppercase;
+}
+.p-thumb.kit {
+  background: linear-gradient(135deg, var(--violet-l), #ddd6fe);
+  color: #6d28d9;
+  border-color: #ddd6fe;
+}
+.kit-tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--violet-l);
+  color: #6d28d9;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  vertical-align: 1px;
+}
+.price {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stock-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.stock-cell .stock-qty {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  order: 2;
+}
+.stock-cell .badge {
+  flex-shrink: 0;
+  order: 1;
+}
+
+/* ---------- Stock overview header panel ---------- */
+.stock-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.so-count {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.so-count .so-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.so-count .so-lbl {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.so-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+/* ---------- Link actions (rows) ---------- */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+.btn-link:hover {
+  text-decoration: underline;
+  background: var(--accent-l);
+}
+.btn-link.warn {
+  color: #b45309;
+}
+.btn-link.danger {
+  color: #b91c1c;
+}
+.btn-link.danger:hover {
+  background: var(--red-l);
+  text-decoration: none;
+}
+.row-actions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}

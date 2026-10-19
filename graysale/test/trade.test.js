@@ -27,11 +27,16 @@ test('AR invoice then receipt; credit note reduces balance', () => {
 
 test('PO lifecycle: draft -> ordered -> received (stock up, AP bill, balanced)', () => {
   const app = makeApp();
-  const { A, B } = seedCatalog(app, { aQty: 0, bQty: 0 });
+  const { A } = seedCatalog(app, { aQty: 0, bQty: 0 });
   const sid = supplier(app);
   const user = admin(app);
 
-  const po = app.purchasing.createPo({ supplierId: sid, items: [{ productId: A.id, qty: 10, unitCostCents: 1800 }], expectedDate: '2026-12-31', user });
+  const po = app.purchasing.createPo({
+    supplierId: sid,
+    items: [{ productId: A.id, qty: 10, unitCostCents: 1800 }],
+    expectedDate: '2026-12-31',
+    user,
+  });
   assert.equal(po.status, 'DRAFT');
   assert.equal(po.total_cents, 20700);
 
@@ -52,7 +57,10 @@ test('PO lifecycle: draft -> ordered -> received (stock up, AP bill, balanced)',
   assert.equal(app.catalog.getProduct(A.id).cost_cents, 1800);
 
   // over-receipt rejected
-  assert.throws(() => app.purchasing.receivePo({ poId: po.id, items: [{ productId: A.id, qty: 1 }], user }), /NOT_ORDERED/);
+  assert.throws(
+    () => app.purchasing.receivePo({ poId: po.id, items: [{ productId: A.id, qty: 1 }], user }),
+    /NOT_ORDERED/,
+  );
 });
 
 test('pay supplier settles AP and posts to chosen method', () => {
@@ -61,7 +69,11 @@ test('pay supplier settles AP and posts to chosen method', () => {
   const sid = supplier(app);
   const user = admin(app);
 
-  const po = app.purchasing.createPo({ supplierId: sid, items: [{ productId: A.id, qty: 5, unitCostCents: 2000 }], user });
+  const po = app.purchasing.createPo({
+    supplierId: sid,
+    items: [{ productId: A.id, qty: 5, unitCostCents: 2000 }],
+    user,
+  });
   app.purchasing.placePo(po.id);
   const { bill } = app.purchasing.receivePo({ poId: po.id, items: [{ productId: A.id, qty: 5 }], user });
   assert.equal(app.suppliers.ledger(sid).owing, 11500);
@@ -80,7 +92,12 @@ test('bank account is created on demand and reconciles manual entries', () => {
   assert.ok(id > 0);
   const acct = app.banks.accounts()[0];
   assert.ok(acct, 'default bank account auto-created');
-  const recId = app.banks.reconcile({ bankAccountId: acct.id, statementDate: '2026-08-31', closingBalance: 100000, transactionIds: [id] });
+  const recId = app.banks.reconcile({
+    bankAccountId: acct.id,
+    statementDate: '2026-08-31',
+    closingBalance: 100000,
+    transactionIds: [id],
+  });
   assert.ok(recId > 0);
   const txs = app.banks.transactions({ reconciled: true });
   assert.equal(txs.length, 1);
@@ -97,7 +114,11 @@ test('EOD shift: opening float, cash flows, variance on close', () => {
   // a second open shift for the same cashier is blocked
   assert.throws(() => app.eod.open({ user: admin(app), openingCashCents: 0 }), /SHIFT_ALREADY_OPEN/);
 
-  const sale = app.pos.checkout({ items: [{ productId: A.id, qty: 1 }], payments: [{ method: 'CASH', amount: 6000 }], user });
+  const sale = app.pos.checkout({
+    items: [{ productId: A.id, qty: 1 }],
+    payments: [{ method: 'CASH', amount: 6000 }],
+    user,
+  });
   assert.equal(sale.change, 825);
 
   const closed = app.eod.close({ shiftId: sh.id, countedCashCents: 5000 + 5175, note: 'all good', user });
@@ -116,7 +137,14 @@ test('reporting slices the same journal the GL does', () => {
   const app = makeApp();
   const { A, B } = seedCatalog(app);
   const user = admin(app);
-  app.pos.checkout({ items: [{ productId: A.id, qty: 1 }, { productId: B.id, qty: 2 }], payments: [{ method: 'CASH', amount: 10000 }], user });
+  app.pos.checkout({
+    items: [
+      { productId: A.id, qty: 1 },
+      { productId: B.id, qty: 2 },
+    ],
+    payments: [{ method: 'CASH', amount: 10000 }],
+    user,
+  });
 
   const r = app.reports.salesSummary({ from: '2026-01-01', to: '2026-12-31' });
   assert.equal(r.saleCount, 1);

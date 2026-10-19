@@ -1,6 +1,0 @@
-Auto-backup scheduled every 4 hours.
-SuperMart POS running at http://localhost:3000
---- Access from other devices on the same Wi-Fi/LAN: ---
-  http://172.26.32.1:3000
-  http://192.168.1.204:3000
-Open the URL above on your phone to use both screens live-synced.

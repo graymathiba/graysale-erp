@@ -10,12 +10,26 @@ dist/
 /public/dist/
 /graysale/web/dist/
 
-# SQLite runtime artifacts (WAL/SHM are transient; seed .db files stay tracked)
+# SQLite runtime artifacts (schema.js re-seeds a fresh DB on first run,
+# so the local .db is disposable state, not source)
+*.db
 *.db-wal
 *.db-shm
 
-# Backup snapshots
-src/backups/
+# PID / ad-hoc run artifacts
+pid.txt
+*.out.txt
+*.err.txt
+
+# Lint output
+eslint-report.json
+
+# Portable-storage descriptor: machine-specific (absolute paths + machine
+# fingerprint). Each install writes its own on first run.
+graysale/src/data/storage.json
+
+# Backup snapshots (live next to the database)
+graysale/src/data/backups/
 
 # Local dev logs (some were tracked pre-gitignore; untracked going forward)
 graysale/server.log

@@ -53,12 +53,14 @@ export class CompanySettingsService {
   update(payload = {}, tenantId) {
     const tenant = resolveTenantId(this.db, tenantId);
     const banks = Array.isArray(payload.banking_details) ? payload.banking_details : [];
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO company_settings (
         id, company_name, trading_as, tagline, address, telephone, mobile,
         reg_number, tin_number, vat_number, banking_details, tenant_id, updated_at
       ) VALUES (
-        1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+        1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime')
       )
       ON CONFLICT(id) DO UPDATE SET
         company_name = excluded.company_name,
@@ -72,20 +74,22 @@ export class CompanySettingsService {
         vat_number = excluded.vat_number,
         banking_details = excluded.banking_details,
         tenant_id = excluded.tenant_id,
-        updated_at = datetime('now')
-    `).run(
-      payload.company_name || '',
-      payload.trading_as || '',
-      payload.tagline || '',
-      payload.address || '',
-      payload.telephone || '',
-      payload.mobile || '',
-      payload.reg_number || '',
-      payload.tin_number || '',
-      payload.vat_number || '',
-      JSON.stringify(banks),
-      tenant,
-    );
+        updated_at = datetime('now','localtime')
+    `,
+      )
+      .run(
+        payload.company_name || '',
+        payload.trading_as || '',
+        payload.tagline || '',
+        payload.address || '',
+        payload.telephone || '',
+        payload.mobile || '',
+        payload.reg_number || '',
+        payload.tin_number || '',
+        payload.vat_number || '',
+        JSON.stringify(banks),
+        tenant,
+      );
     return this.get(tenant);
   }
 }

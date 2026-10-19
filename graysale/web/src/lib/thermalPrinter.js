@@ -19,13 +19,6 @@
 // ---- Low-level byte helpers -------------------------------------
 const textEncoder = new TextEncoder();
 
-/** Bytes for a "start" helper when no encoder (legacy browsers). */
-function charBytes(s) {
-  const out = [];
-  for (let i = 0; i < s.length; i++) out.push(s.charCodeAt(i) & 0xff);
-  return Uint8Array.from(out);
-}
-
 /** Join an array of byte arrays / strings into one Uint8Array. */
 export function concat(parts) {
   const arrays = parts.map((p) => {
@@ -36,7 +29,10 @@ export function concat(parts) {
   const len = arrays.reduce((s, a) => s + a.length, 0);
   const out = new Uint8Array(len);
   let off = 0;
-  for (const a of arrays) { out.set(a, off); off += a.length; }
+  for (const a of arrays) {
+    out.set(a, off);
+    off += a.length;
+  }
   return out;
 }
 
@@ -48,8 +44,8 @@ export const LF = 0x0a;
 const CMD = {
   reset: [ESC, 0x40],
   feed: (n) => [ESC, 0x64, Math.max(1, Math.min(n, 255))],
-  cut: [GS, 0x56, 0x41, 0x00],                 // full cut
-  kick: [ESC, 0x70, 0x00, 0x19, 0xfa],          // cash drawer, pin 2
+  cut: [GS, 0x56, 0x41, 0x00], // full cut
+  kick: [ESC, 0x70, 0x00, 0x19, 0xfa], // cash drawer, pin 2
   printBold: () => Uint8Array.from([ESC, 0x45, 0x01]),
   boldOff: () => Uint8Array.from([ESC, 0x45, 0x00]),
   doubleH: () => Uint8Array.from([GS, 0x21, 0x10]),
@@ -84,13 +80,22 @@ export function rule(ch = '-', width = 42) {
 }
 
 /** Two-column line: label left, value right. */
-export function row(label, value, { width = 42, align = 'left' } = {}) {
+export function row(label, value, { width = 42 } = {}) {
   const l = String(label ?? '');
   const r = String(value ?? '');
   if (l.length + r.length > width) {
     return line(`${l}${' '.repeat(Math.max(1, width - (l.length + r.length)))}${r}`);
   }
   return line(`${l}${' '.repeat(width - l.length - r.length)}${r}`);
+}
+
+/** Wrap a long string to lines of at most `width` chars (e.g. fiscal hashes). */
+export function wrap(text, width = 42) {
+  const s = String(text ?? '');
+  if (s.length <= width) return [s];
+  const out = [];
+  for (let i = 0; i < s.length; i += width) out.push(s.slice(i, i + width));
+  return out;
 }
 
 // ---- Receipt document builders -----------------------------------
@@ -143,7 +148,18 @@ export function buildPosReceipt(doc) {
   }
   if (doc.tenderedCents != null) {
     parts.push(row('Tendered', `${cur}${c(doc.tenderedCents)}`));
-    if ((doc.changeCents || 0) > 0) parts.push(row('Change', `${cur}${c(doc.changeCents)}`, ));
+    if ((doc.changeCents || 0) > 0) parts.push(row('Change', `${cur}${c(doc.changeCents)}`));
+  }
+
+  // ZIMRA FDMS fiscal block (stamped receipt number / device / hash)
+  if (doc.fiscal && (doc.fiscal.receiptNo || doc.fiscal.receiptId || doc.fiscal.hash)) {
+    parts.push(rule('-', W));
+    parts.push(line('*** FISCAL RECEIPT ***', { align: 'center', bold: true }));
+    if (doc.fiscal.receiptNo) parts.push(row('Receipt', doc.fiscal.receiptNo));
+    if (doc.fiscal.serial) parts.push(row('Device', doc.fiscal.serial));
+    if (doc.fiscal.receiptId) parts.push(row('ZIMRA #', doc.fiscal.receiptId));
+    if (doc.fiscal.hash) for (const seg of wrap(doc.fiscal.hash, W)) parts.push(line(seg, { align: 'center' }));
+    parts.push(line('*** ZIMRA FDMS VALID ***', { align: 'center', bold: true }));
   }
 
   parts.push(rule('=', W));
@@ -195,7 +211,7 @@ export function buildLaybyReceipt(doc) {
     parts.push(rule('-', W));
   }
 
-  if (doc.terms) parts.push(line(doc.terms, { align: 'center', }));
+  if (doc.terms) parts.push(line(doc.terms, { align: 'center' }));
   parts.push(line('Please collect goods once fully paid.', { align: 'center' }));
   parts.push(CMD.feed(3));
   parts.push(CMD.cut);
@@ -249,18 +265,25 @@ export function buildEodReport(report, { isZ = false } = {}) {
  * <html> string you can open in a hidden iframe/window and call print().
  */
 export function buildReceiptHtml(doc, opts = {}) {
-  const width = doc.width || 42;
-  const is58 = (doc.width || 80) <= 32 || (opts.type === '58mm');
+  const is58 = (doc.width || 80) <= 32 || opts.type === '58mm';
   const mm = is58 ? '58mm' : '80mm';
   const bodyW = is58 ? 48 : 72;
   const cur = doc.currency || '$';
   const c = (v) => ((v ?? 0) / 100).toFixed(2);
 
-  const lineItemRows = (doc.lines || []).map((it) => `
-    <tr><td class="l">${esc(it.name || '')}</td><td class="r">${it.qty}x</td><td class="r">${cur}${c(it.priceCents)}</td><td class="r">${cur}${c(it.totalCents)}</td></tr>`).join('');
+  const lineItemRows = (doc.lines || [])
+    .map(
+      (it) => `
+    <tr><td class="l">${esc(it.name || '')}</td><td class="r">${it.qty}x</td><td class="r">${cur}${c(it.priceCents)}</td><td class="r">${cur}${c(it.totalCents)}</td></tr>`,
+    )
+    .join('');
 
-  const payments = (doc.payments || []).map((p) => `
-    <div class="lr"><span>${esc(p.method)}</span><span>${cur}${c(p.amountCents)}</span></div>`).join('');
+  const payments = (doc.payments || [])
+    .map(
+      (p) => `
+    <div class="lr"><span>${esc(p.method)}</span><span>${cur}${c(p.amountCents)}</span></div>`,
+    )
+    .join('');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(doc.title || 'Receipt')} ${esc(doc.docNo || '')}</title>
 <style>
@@ -305,6 +328,18 @@ export function buildReceiptHtml(doc, opts = {}) {
   ${payments}
   ${doc.tenderedCents != null ? `<div class="lr"><span>Tendered</span><span>${cur}${c(doc.tenderedCents)}</span></div>` : ''}
   ${(doc.changeCents || 0) > 0 ? `<div class="lr bold"><span>Change</span><span>${cur}${c(doc.changeCents)}</span></div>` : ''}
+  ${
+    doc.fiscal && (doc.fiscal.receiptNo || doc.fiscal.receiptId || doc.fiscal.hash)
+      ? `
+  <hr>
+  <div class="c title">*** FISCAL RECEIPT ***</div>
+  ${doc.fiscal.receiptNo ? `<div class="lr"><span>Receipt</span><span>${esc(doc.fiscal.receiptNo)}</span></div>` : ''}
+  ${doc.fiscal.serial ? `<div class="lr"><span>Device</span><span>${esc(doc.fiscal.serial)}</span></div>` : ''}
+  ${doc.fiscal.receiptId ? `<div class="lr"><span>ZIMRA #</span><span>${esc(doc.fiscal.receiptId)}</span></div>` : ''}
+  ${doc.fiscal.hash ? `<div class="c sub" style="word-break:break-all">${esc(doc.fiscal.hash)}</div>` : ''}
+  <div class="c bold">*** ZIMRA FDMS VALID ***</div>`
+      : ''
+  }
   <hr>
   ${doc.footer ? `<div class="c">${esc(doc.footer)}</div>` : ''}
   <div class="thank">*** Thank you ***</div>
@@ -312,7 +347,10 @@ export function buildReceiptHtml(doc, opts = {}) {
 }
 
 function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  );
 }
 
 // ---- Transport: window.print fallback ------------------------------
@@ -337,7 +375,10 @@ export function printViaWindow(doc, opts = {}) {
   return new Promise((resolve, reject) => {
     const win = frame.contentWindow;
     const done = () => {
-      setTimeout(() => { frame.remove(); resolve(true); }, 500);
+      setTimeout(() => {
+        frame.remove();
+        resolve(true);
+      }, 500);
     };
     win.onafterprint = done;
     setTimeout(() => {
@@ -399,13 +440,23 @@ export async function openUsbPrinter(device) {
   if (!device.opened) await device.open();
   // Try the first configuration and an OUT bulk endpoint.
   const cfg = device.configurations[0];
-  let iface = cfg?.interfaces?.find((i) => (i.alternates || []).some((a) => (a.endpoints || []).some((e) => e.direction === 'out')));
+  let iface = cfg?.interfaces?.find((i) =>
+    (i.alternates || []).some((a) => (a.endpoints || []).some((e) => e.direction === 'out')),
+  );
   const itf = iface || cfg?.interfaces?.[0];
   if (!itf) throw new Error('NO_USB_INTERFACE');
   if (!device.selectedConfiguration) {
-    try { await device.selectConfiguration(cfg.configurationValue); } catch { /* already or unsupported */ }
+    try {
+      await device.selectConfiguration(cfg.configurationValue);
+    } catch {
+      /* already or unsupported */
+    }
   }
-  try { await device.claimInterface(itf.interfaceNumber); } catch { /* already claimed */ }
+  try {
+    await device.claimInterface(itf.interfaceNumber);
+  } catch {
+    /* already claimed */
+  }
   const endpoint = itf.alternates?.[0]?.endpoints?.find((e) => e.direction === 'out');
   return { device, endpoint };
 }
@@ -435,7 +486,11 @@ export async function printReceipt(doc, options = {}) {
   // 1) Serial (preferred when a port is provided or already granted)
   let port = options.serialPort || null;
   if (!port) {
-    try { port = await getMemorySerialPort(); } catch { port = null; }
+    try {
+      port = await getMemorySerialPort();
+    } catch {
+      port = null;
+    }
   }
   if (port) {
     try {
@@ -464,11 +519,25 @@ export async function printReceipt(doc, options = {}) {
 }
 
 export default {
-  ESC, GS, LF,
-  concat, line, rule, row,
-  buildPosReceipt, buildLaybyReceipt, buildEodReport, buildReceiptHtml,
-  printReceipt, printViaWindow,
-  requestSerialPort, writeSerial, getMemorySerialPort,
-  requestUsbPrinter, openUsbPrinter, writeUsb, usbSupported,
+  ESC,
+  GS,
+  LF,
+  concat,
+  line,
+  rule,
+  row,
+  buildPosReceipt,
+  buildLaybyReceipt,
+  buildEodReport,
+  buildReceiptHtml,
+  printReceipt,
+  printViaWindow,
+  requestSerialPort,
+  writeSerial,
+  getMemorySerialPort,
+  requestUsbPrinter,
+  openUsbPrinter,
+  writeUsb,
+  usbSupported,
   KICK: CMD.kick,
 };

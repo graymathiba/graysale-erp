@@ -1,8 +1,11 @@
 import { tx, nextDoc } from '../db/database.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { conflict, notFound } from '../lib/errors.js';
+import { localStamp, nowLocal } from '../lib/ids.js';
 
-// SQLite datetime('now') prints 'YYYY-MM-DD HH:MM:SS'; ISO has T/ms/Z — normalize for range compares.
-const sqlUtc = (iso) => (iso || '').replace('T', ' ').replace(/\.\d+Z?$/, '');
+// Shift stamps are local business time ('YYYY-MM-DD HH:MM:SS'), matching
+// orders.created_at. Older rows may still carry ISO 'T'/ms/Z — normalize
+// before range compares.
+const normalizeStamp = (iso) => (iso || '').replace('T', ' ').replace(/\.\d+Z?$/, '');
 
 // End-of-day cash reconciliation. A shift is the cash drawer session of one
 // cashier/location. Expected cash draws from posted orders + cash payments.
@@ -16,18 +19,28 @@ export class EodService {
     if (open) throw conflict('SHIFT_ALREADY_OPEN');
     return tx(this.db, () => {
       const docNo = nextDoc(this.db, 'SHIFT');
-      const { lastInsertRowid } = this.db.prepare(`
+      const { lastInsertRowid } = this.db
+        .prepare(
+          `
         INSERT INTO shifts (doc_no, user_id, location_id, opening_cash_cents, status, opened_at)
         VALUES (?, ?, ?, ?, 'OPEN', ?)
-      `).run(docNo, user?.id ?? null, locationId ?? user?.locationId ?? null, Math.round(Number(openingCashCents ?? 0)), new Date().toISOString());
+      `,
+        )
+        .run(
+          docNo,
+          user?.id ?? null,
+          locationId ?? user?.locationId ?? null,
+          Math.round(Number(openingCashCents ?? 0)),
+          nowLocal(),
+        );
       return this.get(lastInsertRowid);
     });
   }
 
   // Sum the cash that flowed through the drawer for this shift.
   _cashFlows(shift) {
-    const from = sqlUtc(shift.opened_at || '0000-01-01 00:00:00');
-    const to = sqlUtc(shift.closed_at || new Date(Date.now() + 60_000).toISOString());
+    const from = normalizeStamp(shift.opened_at || '0000-01-01 00:00:00');
+    const to = normalizeStamp(shift.closed_at || localStamp(new Date(Date.now() + 60_000)));
     const fromDay = from.slice(0, 10);
     const toDay = to.slice(0, 10);
 
@@ -65,11 +78,13 @@ export class EodService {
   // per-cashier X/Z reports).
   report(shiftId) {
     const shift = this.get(shiftId);
-    const from = sqlUtc(shift.opened_at || '0000-01-01 00:00:00');
-    const to = sqlUtc(shift.closed_at || new Date(Date.now() + 60_000).toISOString());
+    const from = normalizeStamp(shift.opened_at || '0000-01-01 00:00:00');
+    const to = normalizeStamp(shift.closed_at || localStamp(new Date(Date.now() + 60_000)));
     const person = this.db.prepare('SELECT username, full_name FROM users WHERE id = ?').get(shift.user_id) || {};
 
-    const methodRows = this.db.prepare(`
+    const methodRows = this.db
+      .prepare(
+        `
       SELECT method, kind, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n FROM (
         SELECT json_extract(o.meta, '$.applied_cash') AS amount, 'CASH' AS method,
                (o.type || '_SELL') AS kind
@@ -93,7 +108,9 @@ export class EodService {
         FROM orders o WHERE o.type = 'REFUND' AND o.status = 'PAID' AND o.created_at >= ? AND o.created_at < ?
       ) WHERE amount IS NOT NULL AND amount != 0
       GROUP BY method, kind ORDER BY method
-    `).all(from, to, from, to, from, to, from, to, from, to, from, to);
+    `,
+      )
+      .all(from, to, from, to, from, to, from, to, from, to, from, to);
 
     const breakdown = {};
     for (const r of methodRows) {
@@ -106,19 +123,31 @@ export class EodService {
       }
     }
     // total across all value-holding buckets for easy printing
-    breakdown.total = (breakdown.cash || 0) + (breakdown.card || 0) + (breakdown.mobile || 0)
-      + (breakdown.bank || 0) + (breakdown.layby || 0);
+    breakdown.total =
+      (breakdown.cash || 0) +
+      (breakdown.card || 0) +
+      (breakdown.mobile || 0) +
+      (breakdown.bank || 0) +
+      (breakdown.layby || 0);
 
-    const saleCount = this.db.prepare(`
+    const saleCount = this.db
+      .prepare(
+        `
       SELECT COUNT(*) AS n FROM orders WHERE type = 'SALE' AND status = 'PAID'
         AND created_at >= ? AND created_at < ?
-    `).get(from, to).n;
+    `,
+      )
+      .get(from, to).n;
 
-    const layby = this.db.prepare(`
+    const layby = this.db
+      .prepare(
+        `
       SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status='OPEN' THEN (total_cents - paid_cents) ELSE 0 END), 0) AS outstanding,
              COALESCE(SUM(paid_cents), 0) AS collected
       FROM orders WHERE type = 'LAYAWAY' AND status IN ('OPEN','COMPLETED') AND created_at >= ? AND created_at < ?
-    `).get(from, to);
+    `,
+      )
+      .get(from, to);
 
     const cashNet = this._cashFlows(shift);
     const expected = (shift.opening_cash_cents || 0) + cashNet;
@@ -126,7 +155,13 @@ export class EodService {
     const variance = counted == null ? null : counted - expected;
 
     return {
-      shift: { id: shift.id, doc_no: shift.doc_no, status: shift.status, opened_at: shift.opened_at, closed_at: shift.closed_at },
+      shift: {
+        id: shift.id,
+        doc_no: shift.doc_no,
+        status: shift.status,
+        opened_at: shift.opened_at,
+        closed_at: shift.closed_at,
+      },
       cashier: { username: person.username || null, full_name: person.full_name || null },
       opening_float_cents: shift.opening_cash_cents || 0,
       breakdown,
@@ -141,18 +176,27 @@ export class EodService {
 
   // Z-report: same figures as the X-report but auto-closes the shift on
   // generation. Optionally records the counted cash to compute variance.
-  zReport(shiftId, { countedCashCents, note, user } = {}) {
+  zReport(shiftId, { countedCashCents } = {}) {
     const shift = this.get(shiftId);
     if (shift.status !== 'OPEN') throw conflict('SHIFT_NOT_OPEN');
     const counted = countedCashCents != null ? Math.round(Number(countedCashCents)) : null;
     const rep = this.report(shiftId);
     return tx(this.db, () => {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE shifts SET closed_at = ?, counted_cash_cents = ?, expected_cash_cents = ?,
           variance_cents = ?, status = 'CLOSED'
         WHERE id = ?
-      `).run(new Date().toISOString(), counted ?? rep.expected_cash_cents, rep.expected_cash_cents,
-        counted == null ? 0 : counted - rep.expected_cash_cents, shiftId);
+      `,
+        )
+        .run(
+          nowLocal(),
+          counted ?? rep.expected_cash_cents,
+          rep.expected_cash_cents,
+          counted == null ? 0 : counted - rep.expected_cash_cents,
+          shiftId,
+        );
       const closed = this.get(shiftId);
       return {
         ...rep,
@@ -163,18 +207,21 @@ export class EodService {
     });
   }
 
-
-  close({ shiftId, countedCashCents, note, user }) {
+  close({ shiftId, countedCashCents }) {
     const shift = this.get(shiftId);
     if (shift.status !== 'OPEN') throw conflict('SHIFT_NOT_OPEN');
     const net = this._cashFlows(shift);
     const expected = (shift.opening_cash_cents || 0) + net;
     const counted = Math.round(Number(countedCashCents));
     return tx(this.db, () => {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE shifts SET closed_at = ?, counted_cash_cents = ?, expected_cash_cents = ?, variance_cents = ?, status = 'CLOSED'
         WHERE id = ?
-      `).run(new Date().toISOString(), counted, expected, counted - expected, shiftId);
+      `,
+        )
+        .run(nowLocal(), counted, expected, counted - expected, shiftId);
       return this.get(shiftId);
     });
   }
@@ -186,20 +233,34 @@ export class EodService {
   }
 
   list({ user, limit = 100 } = {}) {
-    const where = []; const vals = [];
-    if (user) { where.push('user_id = ?'); vals.push(user); }
-    return this.db.prepare(`
+    const where = [];
+    const vals = [];
+    if (user) {
+      where.push('user_id = ?');
+      vals.push(user);
+    }
+    return this.db
+      .prepare(
+        `
       SELECT s.*, u.username, u.full_name FROM shifts s LEFT JOIN users u ON u.id = s.user_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY s.id DESC LIMIT ?
-    `).all(...vals, limit);
+    `,
+      )
+      .all(...vals, limit);
   }
 
   currentOpen(userId) {
     if (userId == null) return null;
-    return this.db.prepare(`
+    return (
+      this.db
+        .prepare(
+          `
       SELECT s.*, u.username, u.full_name FROM shifts s LEFT JOIN users u ON u.id = s.user_id
       WHERE s.user_id = ? AND s.status = 'OPEN'
-    `).get(Number(userId)) || null;
+    `,
+        )
+        .get(Number(userId)) || null
+    );
   }
 }

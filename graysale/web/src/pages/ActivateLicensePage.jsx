@@ -37,7 +37,10 @@ export default function ActivateLicensePage() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!keyCode.trim()) { setErr('Enter the license key supplied by your provider.'); return; }
+    if (!keyCode.trim()) {
+      setErr('Enter the license key supplied by your provider.');
+      return;
+    }
     setErr('');
     setBusy(true);
     try {
@@ -57,16 +60,20 @@ export default function ActivateLicensePage() {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand-mark" style={{ display: 'flex' }}>GS</div>
+        <div className="brand-mark" style={{ display: 'flex' }}>
+          GS
+        </div>
         <h1>Activate GraySale</h1>
-        <p className="sub">{(status?.companyName || user?.tenant?.company_name || 'Your business')}</p>
+        <p className="sub">{status?.companyName || user?.tenant?.company_name || 'Your business'}</p>
 
         {status && (
           <div className={`field activation-status activation-${status.status.toLowerCase()}`}>
             <label>License status</label>
             <div className="activation-status-line">
-              <span className={`badge badge-${status.status.toLowerCase()}`}>{STATUS_LABEL[status.status] || status.status}</span>
-              {(status.licenseKey) && <span className="activation-key">{status.licenseKey}</span>}
+              <span className={`badge badge-${status.status.toLowerCase()}`}>
+                {STATUS_LABEL[status.status] || status.status}
+              </span>
+              {status.licenseKey && <span className="activation-key">{status.licenseKey}</span>}
             </div>
           </div>
         )}
@@ -97,7 +104,12 @@ export default function ActivateLicensePage() {
         {ready && (
           <>
             <div className="login-err" />
-            <button type="button" className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={() => navigate('/dashboard')}>
+            <button
+              type="button"
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%' }}
+              onClick={() => navigate('/dashboard')}
+            >
               Enter the store
             </button>
           </>

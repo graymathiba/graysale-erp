@@ -22,9 +22,7 @@ export const add = (...cents) => cents.reduce((a, b) => a + (b ?? 0), 0);
 export const sum = (arr, f) => arr.reduce((a, it) => a + (f(it) ?? 0), 0);
 
 // money of an amount string with a rate in basis points (e.g. 1500 = 15%)
-export const taxOn = (amountCents, rateBps) =>
-  Math.round(((amountCents || 0) * (rateBps || 0)) / 10000);
+export const taxOn = (amountCents, rateBps) => Math.round(((amountCents || 0) * (rateBps || 0)) / 10000);
 
 // apply percentage discount on integer cents, half-up
-export const percentOf = (cents, percent) =>
-  Math.round(((cents || 0) * (percent || 0)) / 100);
+export const percentOf = (cents, percent) => Math.round(((cents || 0) * (percent || 0)) / 100);

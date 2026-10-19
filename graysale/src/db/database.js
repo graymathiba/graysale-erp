@@ -3,8 +3,9 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { runMigrations } from './schema.js';
+import { config } from '../config.js';
 
-const DEFAULT_PATH = process.env.DB_PATH || fileURLToPath(new URL('../data/graysale.db', import.meta.url));
+export const DEFAULT_PATH = config.dbPath || fileURLToPath(new URL('../data/graysale.db', import.meta.url));
 
 export function openDb(path = DEFAULT_PATH) {
   const dir = dirname(path);
@@ -45,13 +46,19 @@ export function tx(db, fn) {
 }
 
 // Sequential per-type document numbering (SALE-00001, INV-00002, ...).
+// Increment is a single atomic statement so concurrent callers (webhook
+// settlement, multi-connection WAL) can never compute the same number twice.
 export function nextDoc(db, prefix) {
-  const row = db.prepare('SELECT value FROM counters WHERE type = ?').get(prefix);
-  const n = (row ? Number(row.value) : 0) + 1;
-  db.prepare(`
-    INSERT INTO counters (type, value) VALUES (?, ?)
-    ON CONFLICT(type) DO UPDATE SET value = excluded.value
-  `).run(prefix, n);
+  const row = db
+    .prepare(
+      `
+    INSERT INTO counters (type, value) VALUES (?, 1)
+    ON CONFLICT(type) DO UPDATE SET value = value + 1
+    RETURNING value
+  `,
+    )
+    .get(prefix);
+  const n = row ? Number(row.value) : 1;
   return `${prefix}-${String(n).padStart(5, '0')}`;
 }
 

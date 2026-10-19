@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeApp, seedCatalog, customer, admin } from './helpers.js';
-import { LicensingService, makeEnforceTenantStatus } from '../../src/licensing/index.js';
+import { LicensingService, makeEnforceTenantStatus } from '../src/licensing/index.js';
 
 test('new tenants default to PENDING_ACTIVATION until a key is redeemed', () => {
   const app = makeApp();
@@ -9,7 +9,10 @@ test('new tenants default to PENDING_ACTIVATION until a key is redeemed', () => 
   const t = licensing.tenants.create({ companyName: 'Fresh Co', ownerEmail: 'fresh@ex.com' });
   assert.equal(t.status, 'PENDING_ACTIVATION');
   const pending = licensing.tenants.list({ status: 'PENDING_ACTIVATION' });
-  assert.ok(pending.some(x => x.id === t.id), 'created tenant is listed as pending activation');
+  assert.ok(
+    pending.some((x) => x.id === t.id),
+    'created tenant is listed as pending activation',
+  );
 });
 
 test('PENDING_ACTIVATION tenants are blocked from ERP routes by the license gate', () => {
@@ -19,11 +22,16 @@ test('PENDING_ACTIVATION tenants are blocked from ERP routes by the license gate
   const tenant = licensing.currentTenant();
   licensing.tenants.setStatus(tenant.id, 'PENDING_ACTIVATION');
 
-  let status = 0; let body = null;
+  let status = 0;
+  let body = null;
   const res = {
     headersSent: false,
-    writeHead(s) { status = s; },
-    end(b) { body = b ? JSON.parse(b) : null; },
+    writeHead(s) {
+      status = s;
+    },
+    end(b) {
+      body = b ? JSON.parse(b) : null;
+    },
   };
   const gate = makeEnforceTenantStatus(db);
 
@@ -31,7 +39,8 @@ test('PENDING_ACTIVATION tenants are blocked from ERP routes by the license gate
   assert.equal(gate({}, res, ['products']), true);
   assert.equal(status, 402);
   assert.equal(body.error, 'ACTIVATION_REQUIRED');
-  status = 0; body = null;
+  status = 0;
+  body = null;
   assert.equal(gate({}, res, ['dashboard', 'stats']), true);
   assert.equal(status, 402);
 
@@ -39,6 +48,10 @@ test('PENDING_ACTIVATION tenants are blocked from ERP routes by the license gate
   assert.equal(gate({}, res, ['license', 'status']), false);
   assert.equal(gate({}, res, ['license', 'activate']), false);
   assert.equal(gate({}, res, ['auth', 'login']), false);
+  // An unactivated tenant must still be able to register and self-serve their
+  // password before the license gate opens.
+  assert.equal(gate({}, res, ['auth', 'register-tenant']), false);
+  assert.equal(gate({}, res, ['auth', 'set-password']), false);
 
   // Redeeming a product key flips the tenant to ACTIVE and unblocks.
   const { keys } = licensing.keys.generate({ planType: 'MONTHLY', count: 1 });
@@ -55,18 +68,28 @@ test('strict tenant isolation: products, customers and users never leak across t
   const tenantA = app.db.prepare('SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1').get().id;
   const licensing = new LicensingService(app.db);
   const tenantB = licensing.tenants.create({ companyName: 'Tenant B', ownerEmail: 'b@ex.com' }).id;
-  const TX = app.catalog.taxClasses().find(t => t.name === 'Standard');
+  const TX = app.catalog.taxClasses().find((t) => t.name === 'Standard');
 
   // Products
   const catA = app.catalog.createCategory('Cat A', tenantA);
   const catB = app.catalog.createCategory('Cat B', tenantB);
-  const pA = app.catalog.createProduct({ sku: 'T-A1', name: 'Prod A', categoryId: catA, costCents: 100, priceCents: 200, taxClassId: TX.id }, tenantA);
-  const pB = app.catalog.createProduct({ sku: 'T-B1', name: 'Prod B', categoryId: catB, costCents: 100, priceCents: 200, taxClassId: TX.id }, tenantB);
+  app.catalog.createProduct(
+    { sku: 'T-A1', name: 'Prod A', categoryId: catA, costCents: 100, priceCents: 200, taxClassId: TX.id },
+    tenantA,
+  );
+  const pB = app.catalog.createProduct(
+    { sku: 'T-B1', name: 'Prod B', categoryId: catB, costCents: 100, priceCents: 200, taxClassId: TX.id },
+    tenantB,
+  );
 
   const listA = app.catalog.listProducts({ tenantId: tenantA });
   assert.equal(listA.length, 1);
   assert.equal(listA[0].sku, 'T-A1');
-  assert.throws(() => app.catalog.getProduct(pB.id, tenantA), /PRODUCT_NOT_FOUND/, 'tenant A must not read tenant B product');
+  assert.throws(
+    () => app.catalog.getProduct(pB.id, tenantA),
+    /PRODUCT_NOT_FOUND/,
+    'tenant A must not read tenant B product',
+  );
   assert.throws(() => app.catalog.resolveProduct(pB.id, tenantA), /PRODUCT_NOT_FOUND/, 'resolve stays in scope');
   assert.equal(app.catalog.findByBarcode('6000000000001', tenantA), null);
 
@@ -80,7 +103,7 @@ test('strict tenant isolation: products, customers and users never leak across t
   // Users
   app.auth.createUser({ username: 'a1', password: 'pw', role: 'cashier', tenantId: tenantA });
   app.auth.createUser({ username: 'b1', password: 'pw', role: 'cashier', tenantId: tenantB });
-  const usersA = app.auth.listUsers(tenantA).map(u => u.username);
+  const usersA = app.auth.listUsers(tenantA).map((u) => u.username);
   assert.ok(usersA.includes('a1'));
   assert.ok(!usersA.includes('b1'), 'users are scoped to their tenant');
 });
@@ -98,7 +121,10 @@ test('dashboardStats aggregates real financial data (revenue, cash, ecocash, bal
   // One sale split CASH + ECOCASH (Product A: 4500 + 15% = 5175).
   app.pos.checkout({
     items: [{ productId: A.id, qty: 1 }],
-    payments: [{ method: 'CASH', amount: 3000 }, { method: 'ECOCASH', amount: 2175 }],
+    payments: [
+      { method: 'CASH', amount: 3000 },
+      { method: 'ECOCASH', amount: 2175 },
+    ],
     user,
   });
   // One unallocated credit invoice = money still owed to the business.

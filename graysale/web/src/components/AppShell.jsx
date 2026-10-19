@@ -32,7 +32,7 @@ export default function AppShell() {
             <div className="side-group" key={g.title}>
               <div className="side-group-title">{g.title}</div>
               {g.items
-                .filter((it) => !it.super ? (!it.cap || can(it.cap)) : isSuperAdmin)
+                .filter((it) => (!it.super ? !it.cap || can(it.cap) : isSuperAdmin))
                 .map((it) => (
                   <button
                     key={it.key}
@@ -53,7 +53,9 @@ export default function AppShell() {
           <div className="avatar">{initials(user?.fullName || user?.username)}</div>
           <div className="who">
             <div className="nm">{user?.fullName || user?.username}</div>
-            <div className="em">{user?.username} · {user?.role}</div>
+            <div className="em">
+              {user?.username} · {user?.role}
+            </div>
           </div>
         </div>
       </aside>
@@ -62,7 +64,9 @@ export default function AppShell() {
         <header className="topbar">
           <div className="brand">
             <span className="brand-mark">GS</span>
-            <span className="brand-name">GraySale <span>ERP</span></span>
+            <span className="brand-name">
+              GraySale <span>ERP</span>
+            </span>
           </div>
 
           <div className="breadcrumb">
@@ -85,10 +89,14 @@ export default function AppShell() {
           />
 
           <div className="tb-action">
-            <button className="btn btn-primary" onClick={() => navigate('/pos')}>New Sale</button>
+            <button className="btn btn-primary" onClick={() => navigate('/pos')}>
+              New Sale
+            </button>
           </div>
 
-          <button className="btn btn-ghost" onClick={logout}>Log out</button>
+          <button className="btn btn-ghost" onClick={logout}>
+            Log out
+          </button>
         </header>
 
         <div className="content-scroll">

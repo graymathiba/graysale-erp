@@ -11,9 +11,23 @@ const SESSION_EXPIRED_MSG = 'Session expired. Please log in again.';
 const ACTIVATION_REQUIRED_MSG = 'Your GraySale license is not active. Activation required before continuing.';
 
 export const authStore = {
-  get token() { return localStorage.getItem(tokenKey) || ''; },
-  get user() { try { return JSON.parse(localStorage.getItem(userKey) || 'null'); } catch { return null; } },
-  get tenant() { try { return JSON.parse(localStorage.getItem(tenantKey) || 'null'); } catch { return null; } },
+  get token() {
+    return localStorage.getItem(tokenKey) || '';
+  },
+  get user() {
+    try {
+      return JSON.parse(localStorage.getItem(userKey) || 'null');
+    } catch {
+      return null;
+    }
+  },
+  get tenant() {
+    try {
+      return JSON.parse(localStorage.getItem(tenantKey) || 'null');
+    } catch {
+      return null;
+    }
+  },
   set(data) {
     localStorage.setItem(tokenKey, data.token);
     localStorage.setItem(userKey, JSON.stringify(data.user));
@@ -22,7 +36,11 @@ export const authStore = {
     disarmAuthGuard();
     disarmActivationGuard();
   },
-  clear() { localStorage.removeItem(tokenKey); localStorage.removeItem(userKey); localStorage.removeItem(tenantKey); },
+  clear() {
+    localStorage.removeItem(tokenKey);
+    localStorage.removeItem(userKey);
+    localStorage.removeItem(tenantKey);
+  },
 };
 
 export class ApiError extends Error {
@@ -39,12 +57,16 @@ export class ApiError extends Error {
 // ---------- single-instance 401 guard ----------
 let authGuardArmed = false;
 
-export function disarmAuthGuard() { authGuardArmed = false; }
+export function disarmAuthGuard() {
+  authGuardArmed = false;
+}
 
 // ---------- single-instance 402 (license required) guard ----------
 let activationGuardArmed = false;
 
-export function disarmActivationGuard() { activationGuardArmed = false; }
+export function disarmActivationGuard() {
+  activationGuardArmed = false;
+}
 
 // Fires the activation-required notice ONCE per session. Does not clear the
 // session (the user is authenticated, just not licensed yet).
@@ -87,7 +109,11 @@ async function request(method, path, body, { skipAuthGuard = false } = {}) {
     throw new ApiError('Network error — is the backend running?', 0, 'NETWORK');
   }
   let data = {};
-  try { data = await res.json(); } catch { /* no body */ }
+  try {
+    data = await res.json();
+  } catch {
+    /* no body */
+  }
   const msg = data.error || data.message || `HTTP ${res.status}`;
 
   if (res.status === 401 && path !== '/auth/login' && !skipAuthGuard) {
@@ -117,7 +143,7 @@ export async function login(username, password) {
   const r = await api.post('/auth/login', { username, password });
   if (!r.ok) throw new ApiError(r.error || 'Login failed', 401);
   authStore.set({ token: r.token, user: r.user, tenant: r.tenant });
-  return { user: r.user, tenant: r.tenant };
+  return { user: r.user, tenant: r.tenant, requiresPasswordChange: !!r.requiresPasswordChange };
 }
 
 // Boot-time session validation. Errors here are handled silently by AuthContext

@@ -8,7 +8,15 @@ import { printReceipt } from '../lib/thermalPrinter';
 const TYPES = ['80mm', '58mm', 'A4', 'Generic'];
 const CONNECTIONS = ['USB', 'Bluetooth', 'Network', 'Serial'];
 
-const EMPTY_FORM = { name: '', type: '80mm', connection: 'USB', ipAddress: '', cashDrawer: false, fiscal: false, isDefault: false };
+const EMPTY_FORM = {
+  name: '',
+  type: '80mm',
+  connection: 'USB',
+  ipAddress: '',
+  cashDrawer: false,
+  fiscal: false,
+  isDefault: false,
+};
 
 export default function PrinterPanel() {
   const { can } = useAuth();
@@ -23,29 +31,51 @@ export default function PrinterPanel() {
     try {
       const list = await api.get('/printers');
       setPrinters(Array.isArray(list) ? list : []);
-    } catch (e) { if (e?.silent) return; toast.err(e.message); }
+    } catch (e) {
+      if (e?.silent) return;
+      toast.err(e.message);
+    }
   };
 
   useEffect(() => {
     load();
-    api.get('/settings').then(setSettings).catch(() => {});
+    api
+      .get('/settings')
+      .then(setSettings)
+      .catch(() => {});
   }, []);
 
-  const openNew = () => { setForm(EMPTY_FORM); setCreating({}); };
+  const openNew = () => {
+    setForm(EMPTY_FORM);
+    setCreating({});
+  };
 
   const openEdit = (p) => {
     setForm({
-      name: p.name, type: p.type || '80mm', connection: p.connection || 'USB',
-      ipAddress: p.ip_address || '', cashDrawer: !!p.cash_drawer, fiscal: !!p.fiscal, isDefault: !!p.is_default,
+      name: p.name,
+      type: p.type || '80mm',
+      connection: p.connection || 'USB',
+      ipAddress: p.ip_address || '',
+      cashDrawer: !!p.cash_drawer,
+      fiscal: !!p.fiscal,
+      isDefault: !!p.is_default,
     });
     setCreating({ id: p.id });
   };
 
   const save = async () => {
-    if (!form.name.trim()) { toast.warn('Printer name is required'); return; }
+    if (!form.name.trim()) {
+      toast.warn('Printer name is required');
+      return;
+    }
     const body = {
-      name: form.name.trim(), type: form.type, connection: form.connection,
-      ipAddress: form.ipAddress.trim() || null, cashDrawer: form.cashDrawer, fiscal: form.fiscal, isDefault: form.isDefault,
+      name: form.name.trim(),
+      type: form.type,
+      connection: form.connection,
+      ipAddress: form.ipAddress.trim() || null,
+      cashDrawer: form.cashDrawer,
+      fiscal: form.fiscal,
+      isDefault: form.isDefault,
     };
     try {
       if (creating?.id) await api.put(`/printers/${creating.id}`, body);
@@ -53,7 +83,10 @@ export default function PrinterPanel() {
       toast.ok(creating?.id ? 'Printer updated' : 'Printer added');
       setCreating(null);
       load();
-    } catch (e) { if (e?.silent) return; toast.err(e.message); }
+    } catch (e) {
+      if (e?.silent) return;
+      toast.err(e.message);
+    }
   };
 
   const setDefault = async (p) => {
@@ -61,7 +94,10 @@ export default function PrinterPanel() {
       await api.put(`/printers/${p.id}`, { isDefault: true });
       toast.ok(`${p.name} set as default`);
       load();
-    } catch (e) { if (e?.silent) return; toast.err(e.message); }
+    } catch (e) {
+      if (e?.silent) return;
+      toast.err(e.message);
+    }
   };
 
   const remove = async (p) => {
@@ -70,7 +106,10 @@ export default function PrinterPanel() {
       await api.del(`/printers/${p.id}`);
       toast.ok('Printer deleted');
       load();
-    } catch (e) { if (e?.silent) return; toast.err(e.message); }
+    } catch (e) {
+      if (e?.silent) return;
+      toast.err(e.message);
+    }
   };
 
   // Test receipt printed through the engine's auto-transport:
@@ -81,14 +120,26 @@ export default function PrinterPanel() {
       const is58 = p.type === '58mm';
       const doc = {
         width: is58 ? 32 : 42,
-        company: settings.company || 'STORE', address: settings.address || '', phone: settings.phone || '', tin: settings.tin || '',
-        title: 'TEST RECEIPT', docNo: 'TEST' + String(p.id).padStart(4, '0'),
-        date: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+        company: settings.company || 'STORE',
+        address: settings.address || '',
+        phone: settings.phone || '',
+        tin: settings.tin || '',
+        title: 'TEST RECEIPT',
+        docNo: 'TEST' + String(p.id).padStart(4, '0'),
+        date: new Date().toLocaleString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
         cashier: 'Printer test',
         lines: [{ name: 'Sample item', qty: 1, priceCents: 1250, totalCents: 1250 }],
-        subtotalCents: 1250, taxCents: 0, totalCents: 1250,
+        subtotalCents: 1250,
+        taxCents: 0,
+        totalCents: 1250,
         payments: [{ method: 'CASH', amountCents: 1250 }],
-        tenderedCents: 1250, changeCents: 0,
+        tenderedCents: 1250,
+        changeCents: 0,
         footer: settings.company || 'Thank you',
       };
       const result = await printReceipt(doc, { type: p.type || '80mm' });
@@ -114,7 +165,9 @@ export default function PrinterPanel() {
       <div className="panel-hd">
         <span>Receipt printers</span>
         {can('settings.manage') && (
-          <button className="btn btn-sm btn-primary" onClick={openNew}>+ Add printer</button>
+          <button className="btn btn-sm btn-primary" onClick={openNew}>
+            + Add printer
+          </button>
         )}
       </div>
       <div className="panel-bd">
@@ -144,19 +197,29 @@ export default function PrinterPanel() {
                   {!p.active && <span className="badge badge-gray">Inactive</span>}
                 </div>
                 <div className="pc-sub">
-                  {p.connection === 'Network' && p.ip_address ? `IP ${p.ip_address}` : p.connection === 'Network' ? 'Network' : ''}
+                  {p.connection === 'Network' && p.ip_address
+                    ? `IP ${p.ip_address}`
+                    : p.connection === 'Network'
+                      ? 'Network'
+                      : ''}
                 </div>
                 <div className="pc-actions">
                   <button className="btn btn-sm" onClick={() => test(p)} disabled={testing === p.id}>
                     {testing === p.id ? 'Printing…' : 'Test print'}
                   </button>
                   {!p.is_default && can('settings.manage') && (
-                    <button className="btn btn-sm" onClick={() => setDefault(p)}>Set default</button>
+                    <button className="btn btn-sm" onClick={() => setDefault(p)}>
+                      Set default
+                    </button>
                   )}
                   {can('settings.manage') && (
                     <>
-                      <button className="btn btn-sm" onClick={() => openEdit(p)}>Edit</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => remove(p)}>Delete</button>
+                      <button className="btn btn-sm" onClick={() => openEdit(p)}>
+                        Edit
+                      </button>
+                      <button className="btn btn-sm btn-danger" onClick={() => remove(p)}>
+                        Delete
+                      </button>
                     </>
                   )}
                 </div>
@@ -166,38 +229,93 @@ export default function PrinterPanel() {
         )}
 
         {can('settings.manage') && printers.length > 0 && (
-          <button className="btn btn-sm mt-3" onClick={openNew}>+ Add another printer</button>
+          <button className="btn btn-sm mt-3" onClick={openNew}>
+            + Add another printer
+          </button>
         )}
       </div>
 
       {creating && (
-        <Modal title={creating.id ? 'Edit printer' : 'Add receipt printer'} onClose={() => setCreating(null)}
+        <Modal
+          title={creating.id ? 'Edit printer' : 'Add receipt printer'}
+          onClose={() => setCreating(null)}
           footer={
             <>
-              <button className="btn" onClick={() => setCreating(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={save}>{creating.id ? 'Save' : 'Add'}</button>
+              <button className="btn" onClick={() => setCreating(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={save}>
+                {creating.id ? 'Save' : 'Add'}
+              </button>
             </>
-          }>
-          <div className="field"><label>Printer name *</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Front till 80mm" /></div>
+          }
+        >
+          <div className="field">
+            <label>Printer name *</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Front till 80mm"
+            />
+          </div>
           <div className="fields-2">
-            <div className="field"><label>Paper type</label>
+            <div className="field">
+              <label>Paper type</label>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select></div>
-            <div className="field"><label>Connection</label>
+                {TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Connection</label>
               <select value={form.connection} onChange={(e) => setForm({ ...form, connection: e.target.value })}>
-                {CONNECTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select></div>
+                {CONNECTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           {form.connection === 'Network' && (
-            <div className="field"><label>IP address</label>
-              <input value={form.ipAddress} onChange={(e) => setForm({ ...form, ipAddress: e.target.value })} placeholder="192.168.1.50" inputMode="decimal" /></div>
+            <div className="field">
+              <label>IP address</label>
+              <input
+                value={form.ipAddress}
+                onChange={(e) => setForm({ ...form, ipAddress: e.target.value })}
+                placeholder="192.168.1.50"
+                inputMode="decimal"
+              />
+            </div>
           )}
           <div className="checks">
-            <label className="check"><input type="checkbox" checked={form.cashDrawer} onChange={(e) => setForm({ ...form, cashDrawer: e.target.checked })} /> Cash drawer</label>
-            <label className="check"><input type="checkbox" checked={form.fiscal} onChange={(e) => setForm({ ...form, fiscal: e.target.checked })} /> Fiscal device</label>
-            <label className="check"><input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} /> Set as default printer</label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.cashDrawer}
+                onChange={(e) => setForm({ ...form, cashDrawer: e.target.checked })}
+              />{' '}
+              Cash drawer
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.fiscal}
+                onChange={(e) => setForm({ ...form, fiscal: e.target.checked })}
+              />{' '}
+              Fiscal device
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.isDefault}
+                onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+              />{' '}
+              Set as default printer
+            </label>
           </div>
         </Modal>
       )}
