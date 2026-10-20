@@ -37,7 +37,7 @@ export default function SetPasswordPage() {
         navigate('/activate-license', { replace: true });
         return;
       }
-      navigate(user?.role === 'cashier' ? '/pos' : '/desktop', { replace: true });
+      navigate(user?.role === 'cashier' ? '/desktop/pos' : '/desktop', { replace: true });
     } catch (ex) {
       setErr(ex.message || 'Failed to set password');
     } finally {

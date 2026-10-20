@@ -50,7 +50,7 @@ export default function RegisterCompanyPage() {
       setTenant(r.tenant);
       toast.ok('Account created — welcome to GraySale!');
       const pending = ['PENDING_KEY', 'PENDING_ACTIVATION', 'BLOCKED'].includes(r.tenant?.status);
-      navigate(pending ? '/activate-license' : '/dashboard', { replace: true });
+      navigate(pending ? '/activate-license' : '/desktop', { replace: true });
     } catch (ex) {
       setErr(ex.message || 'Registration failed');
     } finally {

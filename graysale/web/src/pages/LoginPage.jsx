@@ -28,7 +28,7 @@ export default function LoginPage() {
         return;
       }
       toast.ok(`Welcome, ${u.fullName || u.username}`);
-      navigate(u.role === 'cashier' ? '/pos' : '/desktop');
+      navigate(u.role === 'cashier' ? '/desktop/pos' : '/desktop');
     } catch (ex) {
       setErr(ex.message || 'Login failed');
     } finally {

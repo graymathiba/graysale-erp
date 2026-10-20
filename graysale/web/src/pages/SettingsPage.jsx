@@ -16,6 +16,9 @@ export default function SettingsPage() {
     currency: '$',
     taxName: 'VAT',
     termsDays: '30',
+    quoteValidityDays: '14',
+    invoiceFooter: '',
+    quoteFooter: '',
     fiscal: false,
     cashDrawer: false,
   });
@@ -32,6 +35,9 @@ export default function SettingsPage() {
           currency: s.currency || '$',
           taxName: s.taxName || 'VAT',
           termsDays: s.termsDays || '30',
+          quoteValidityDays: s.quoteValidityDays || '14',
+          invoiceFooter: s.invoiceFooter || '',
+          quoteFooter: s.quoteFooter || '',
           fiscal: !!s.fiscal,
           cashDrawer: !!s.cashDrawer,
         });
@@ -44,7 +50,11 @@ export default function SettingsPage() {
 
   const save = async () => {
     try {
-      await api.post('/settings', { ...form, termsDays: Number(form.termsDays) || 30 });
+      await api.post('/settings', {
+        ...form,
+        termsDays: Number(form.termsDays) || 30,
+        quoteValidityDays: Number(form.quoteValidityDays) || 14,
+      });
       toast.ok('Settings saved');
     } catch (e) {
       if (e?.silent) return;
@@ -122,6 +132,45 @@ export default function SettingsPage() {
             />{' '}
             Open cash drawer on cash sale
           </label>
+        </div>
+      </div>
+      <div className="panel mt-4">
+        <div className="panel-hd">
+          <span>Documents &amp; quotations</span>
+        </div>
+        <div className="panel-bd">
+          <p className="hint">
+            Shown on the A4 quotation / invoice printout. Company header, banking and statutory blocks come from
+            Maintenance &rarr; Company Profile.
+          </p>
+          <div className="form-grid">
+            <div className="field">
+              <label>Quote validity (days)</label>
+              <input
+                value={form.quoteValidityDays}
+                onChange={(e) => setForm({ ...form, quoteValidityDays: e.target.value })}
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>Invoice footer note</label>
+            <textarea
+              rows={2}
+              value={form.invoiceFooter}
+              onChange={(e) => setForm({ ...form, invoiceFooter: e.target.value })}
+              placeholder="e.g. Goods sold are not returnable after 7 days."
+            />
+          </div>
+          <div className="field">
+            <label>Quotation footer note</label>
+            <textarea
+              rows={2}
+              value={form.quoteFooter}
+              onChange={(e) => setForm({ ...form, quoteFooter: e.target.value })}
+              placeholder="e.g. Prices valid while stocks last."
+            />
+          </div>
         </div>
       </div>
       <PrinterPanel />

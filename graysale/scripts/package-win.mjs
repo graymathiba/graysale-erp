@@ -88,7 +88,10 @@ function ensureStage(name) {
   try {
     rmSync(stageTop, { recursive: true, force: true });
   } catch (e) {
-    if (e.code !== 'EBUSY' && e.code !== 'ENOTEMPTY') throw e;
+    // ON WINDOWS a running copy of the app locks its DLLs (EPERM/EACCES);
+    // an open console can hold EBUSY/ENOTEMPTY. Either way: never block a
+    // release, stage into a fresh timestamped directory instead.
+    if (!['EBUSY', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
     base = join(DIST, `${name}.build-${Date.now()}`);
     console.warn(`package-win: previous stage is locked (${e.code}) - staging into ${base}`);
   }

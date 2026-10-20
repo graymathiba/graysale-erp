@@ -10,9 +10,11 @@ export default function DynamicDocumentPrint({ companySettings = {}, documentDat
     docNumber = '',
     date = '',
     dueDate = '',
+    dueLabel = 'Due:',
     customerName = '',
     items = [],
     totalAmount = 0,
+    footer = '',
   } = documentData;
 
   const bank = cs.banking_details?.[0];
@@ -47,7 +49,7 @@ export default function DynamicDocumentPrint({ companySettings = {}, documentDat
             )}
             {dueDate && (
               <div>
-                <span>:</span>
+                <span>{dueLabel}</span>
                 <span>{dueDate}</span>
               </div>
             )}
@@ -113,6 +115,8 @@ export default function DynamicDocumentPrint({ companySettings = {}, documentDat
           {cs.vat_number && <div>VAT NO: {cs.vat_number}</div>}
         </div>
       </div>
+
+      {footer && <div className="doc-footer-note">{footer}</div>}
     </div>
   );
 }

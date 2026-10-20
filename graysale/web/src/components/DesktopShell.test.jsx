@@ -31,7 +31,6 @@ function renderShell() {
           <Route path="pos" element={<div data-testid="route-pos" />} />
           <Route path="stock" element={<div data-testid="route-stock" />} />
         </Route>
-        <Route path="/dashboard" element={<div data-testid="route-modern" />} />
       </Routes>
     </MemoryRouter>,
   );

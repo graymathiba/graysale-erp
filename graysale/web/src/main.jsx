@@ -4,16 +4,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/theme.css';
 import { AuthProvider, useAuth } from './api/AuthContext';
 import { ToastProvider } from './components/Toast';
-import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
 import RegisterCompanyPage from './pages/RegisterCompanyPage';
 import SetPasswordPage from './pages/SetPasswordPage';
 import ActivateLicensePage from './pages/ActivateLicensePage';
 import StorageSetupPage from './pages/StorageSetupPage';
 import StoragePage from './pages/StoragePage';
+import DocumentPrintPage from './pages/DocumentPrintPage';
 
 import DashboardPage from './pages/DashboardPage';
-import PosPage from './pages/PosPage';
 import StockPage from './pages/StockPage';
 import InvoicesPage from './pages/InvoicesPage';
 import PurchasingPage from './pages/PurchasingPage';
@@ -27,7 +26,6 @@ import CompanySettingsPage from './pages/CompanySettingsPage';
 import CompanyProfilePage from './pages/CompanyProfilePage';
 import UsersPage from './pages/UsersPage';
 import SupportPage from './pages/SupportPage';
-import ControlTowerLayout from './pages/controlTower/ControlTowerLayout';
 import DesktopShell from './components/DesktopShell';
 import DesktopHomePage from './pages/DesktopHomePage';
 import DesktopPOSPage from './pages/DesktopPOSPage';
@@ -44,22 +42,6 @@ function RequireAuth({ children }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  return children;
-}
-
-// Strict Control Tower guard: only accounts carrying the global
-// is_super_admin flag may render the platform-administration panel.
-function RequireSuperAdmin({ children }) {
-  const { user, ready } = useAuth();
-  if (!ready)
-    return (
-      <div className="loader">
-        <span className="spinner" />
-        Loading…
-      </div>
-    );
-  if (!user) return <Navigate to="/login" replace />;
-  if (!user.isSuperAdmin) return <Navigate to="/desktop" replace />;
   return children;
 }
 
@@ -132,6 +114,28 @@ function RequireStorage({ children }) {
   return children;
 }
 
+// Legacy Modern-UI URLs (pre-desktop build) land on their Classic Desktop
+// equivalent so old bookmarks and printed links never 404.
+const LEGACY_REDIRECTS = {
+  '/pos': '/desktop/pos',
+  '/dashboard': '/desktop/dashboard',
+  '/stock': '/desktop/stock',
+  '/customers': '/desktop/customers',
+  '/suppliers': '/desktop/suppliers',
+  '/purchasing': '/desktop/purchasing',
+  '/invoices': '/desktop/invoices',
+  '/accounting': '/desktop/accounting',
+  '/reports': '/desktop/reports',
+  '/eod': '/desktop/eod',
+  '/settings': '/desktop/settings',
+  '/users': '/desktop/users',
+  '/storage': '/desktop/storage',
+  '/company': '/desktop/company',
+  '/company-profile': '/desktop/company-profile',
+  '/support': '/desktop/support',
+  '/admin/control-tower': '/desktop',
+};
+
 function App() {
   return (
     <ToastProvider>
@@ -171,45 +175,20 @@ function App() {
                 </RequireAuth>
               }
             />
+            {/* Full-page A4 document printer (quotes / invoices / orders). */}
             <Route
+              path="/print/doc/:kind/:id"
               element={
-                <RequireStorage>
-                  <RequireAuth>
-                    <RequireActiveTenant>
-                      <AppShell />
-                    </RequireActiveTenant>
-                  </RequireAuth>
-                </RequireStorage>
+                <RequireAuth>
+                  <DocumentPrintPage />
+                </RequireAuth>
               }
-            >
-              <Route path="/" element={<Navigate to="/desktop" replace />} />
-              <Route path="/pos" element={<PosPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/accounting" element={<AccountingPage />} />
-              <Route path="/purchasing" element={<PurchasingPage />} />
-              <Route path="/invoices" element={<InvoicesPage />} />
-              <Route path="/stock" element={<StockPage />} />
-              <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/suppliers" element={<SuppliersPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/eod" element={<EodPage />} />
-              <Route path="/storage" element={<StoragePage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/company" element={<CompanySettingsPage />} />
-              <Route path="/company-profile" element={<CompanyProfilePage />} />
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/support" element={<SupportPage />} />
-              <Route
-                path="/admin/control-tower/*"
-                element={
-                  <RequireSuperAdmin>
-                    <ControlTowerLayout />
-                  </RequireSuperAdmin>
-                }
-              />
-            </Route>
+            />
+            {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
+              <Route key={from} path={from} element={<Navigate to={to} replace />} />
+            ))}
 
-            {/* ============ Classic Desktop mode (Retail Man-style shell) ============ */}
+            {/* ============ Classic Desktop — the only ERP workspace ============ */}
             <Route
               element={
                 <RequireStorage>
@@ -221,8 +200,10 @@ function App() {
                 </RequireStorage>
               }
             >
+              <Route path="/" element={<Navigate to="/desktop" replace />} />
               <Route path="/desktop" element={<DesktopHomePage />} />
               <Route path="/desktop/pos" element={<DesktopPOSPage />} />
+              <Route path="/desktop/dashboard" element={<DashboardPage />} />
               <Route path="/desktop/stock" element={<StockPage />} />
               <Route path="/desktop/customers" element={<CustomersPage />} />
               <Route path="/desktop/suppliers" element={<SuppliersPage />} />
@@ -232,6 +213,7 @@ function App() {
               <Route path="/desktop/reports" element={<ReportsPage />} />
               <Route path="/desktop/eod" element={<EodPage />} />
               <Route path="/desktop/settings" element={<SettingsPage />} />
+              <Route path="/desktop/company" element={<CompanySettingsPage />} />
               <Route path="/desktop/users" element={<UsersPage />} />
               <Route path="/desktop/storage" element={<StoragePage />} />
               <Route path="/desktop/company-profile" element={<CompanyProfilePage />} />

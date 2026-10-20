@@ -26,6 +26,8 @@ export default function PrinterPanel() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(null); // { id } or {} for new
   const [testing, setTesting] = useState(false);
+  const [devicePrinters, setDevicePrinters] = useState(null);
+  const [scanning, setScanning] = useState(false);
 
   const load = async () => {
     try {
@@ -160,6 +162,47 @@ export default function PrinterPanel() {
     return map[c] || 'badge-gray';
   };
 
+  // ----- device printer discovery (wired USB / Bluetooth / network) -----
+  // The bundled server runs on this PC, so it can ask Windows for every
+  // installed printer. One click adds a discovered device to the ERP.
+  const scanDevices = async () => {
+    setScanning(true);
+    try {
+      const rows = await api.get('/printers/system');
+      setDevicePrinters(Array.isArray(rows) ? rows : []);
+      if (!rows.length) toast.warn('No printers found on this device');
+    } catch (e) {
+      if (!e?.silent) toast.err(e.message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const guessType = (name = '') => {
+    const n = name.toLowerCase();
+    if (n.includes('58')) return '58mm';
+    if (n.includes('a4') || n.includes('laser') || n.includes('officejet')) return 'A4';
+    return '80mm';
+  };
+
+  const addDetected = async (d) => {
+    try {
+      await api.post('/printers', {
+        name: d.name,
+        type: guessType(d.name),
+        connection: d.connection,
+        ipAddress: d.connection === 'Network' ? String(d.port || '').replace(/^IP_/, '') : null,
+        cashDrawer: false,
+        fiscal: false,
+        isDefault: printers.length === 0,
+      });
+      toast.ok(`${d.name} added`);
+      load();
+    } catch (e) {
+      if (!e?.silent) toast.err(e.message);
+    }
+  };
+
   return (
     <div className="panel mt-4">
       <div className="panel-hd">
@@ -175,6 +218,44 @@ export default function PrinterPanel() {
           Configure the thermal printers used at the till. Receipts print via Web Serial / Web USB where available,
           otherwise through your device&rsquo;s print dialog (works from phones and tablets too).
         </p>
+
+        {can('settings.manage') && (
+          <div className="printer-scan">
+            <div className="printer-scan-hd">
+              <div>
+                <div className="printer-scan-title">Printers on this device</div>
+                <div className="cd-sub">Wired (USB), Bluetooth and network printers installed on this PC.</div>
+              </div>
+              <button className="btn btn-sm" onClick={scanDevices} disabled={scanning}>
+                {scanning ? 'Scanning…' : 'Scan this PC'}
+              </button>
+            </div>
+            {devicePrinters !== null && (
+              <div className="printer-scan-list">
+                {devicePrinters.length === 0 ? (
+                  <div className="hint">No printers were found. Add one manually below.</div>
+                ) : (
+                  devicePrinters.map((d) => {
+                    const already = printers.some((p) => p.name === d.name);
+                    return (
+                      <div className="printer-scan-row" key={d.name}>
+                        <div className="pc-name">{d.name}</div>
+                        <span className={`badge ${connBadge(d.connection)}`}>{d.connection}</span>
+                        <span className="cd-sub">
+                          {d.port}
+                          {d.driver ? ` · ${d.driver}` : ''}
+                        </span>
+                        <button className="btn btn-sm btn-primary" disabled={already} onClick={() => addDetected(d)}>
+                          {already ? 'Added' : 'Add'}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {printers.length === 0 ? (
           <div className="empty-state">

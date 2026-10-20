@@ -1,8 +1,25 @@
 // Instance settings (company + EcoCash/FDMS integration), dynamic
 // company document settings, tenant self-service profile and printers.
 
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { backupDatabase, listBackups } from '../../db/backup.js';
 import { config } from '../../config.js';
+
+const execFileAsync = promisify(execFile);
+
+// Classify a Windows printer port into the connection kinds the ERP models.
+// USB001/VUSB -> USB, IP_* / hostname ports -> Network, COM* -> Serial,
+// anything bluetooth-flavoured -> Bluetooth.
+function classifyPort(portName = '') {
+  const p = String(portName);
+  const up = p.toUpperCase();
+  if (up.includes('BLUETOOTH') || up.startsWith('BTH')) return 'Bluetooth';
+  if (up.startsWith('USB') || up.startsWith('VUSB')) return 'USB';
+  if (up.startsWith('COM')) return 'Serial';
+  if (up.startsWith('IP_') || /^[\d.]+$/.test(up) || up.includes('.local')) return 'Network';
+  return 'USB';
+}
 
 export function registerSettings({
   route,
@@ -24,6 +41,9 @@ export function registerSettings({
       currency: dbSetting(S, 'company.currency'),
       taxName: dbSetting(S, 'tax.name'),
       termsDays: dbSetting(S, 'doc.default_terms_days'),
+      quoteValidityDays: dbSetting(S, 'doc.quote_validity_days'),
+      invoiceFooter: dbSetting(S, 'doc.invoice_footer'),
+      quoteFooter: dbSetting(S, 'doc.quote_footer'),
       fiscal: dbSetting(S, 'pos.fiscal') === '1',
       cashDrawer: dbSetting(S, 'pos.cash_drawer') === '1',
       ecocash: {
@@ -66,6 +86,9 @@ export function registerSettings({
       currency: 'company.currency',
       taxName: 'tax.name',
       termsDays: 'doc.default_terms_days',
+      quoteValidityDays: 'doc.quote_validity_days',
+      invoiceFooter: 'doc.invoice_footer',
+      quoteFooter: 'doc.quote_footer',
     };
     const ecoMap = {
       ecocashEnabled: 'ecocash.enabled',
@@ -134,6 +157,39 @@ export function registerSettings({
   });
 
   // ----- printers -----
+  // Enumerate the printers installed on this machine (Windows). The desktop
+  // app's bundled server runs on the shop PC, so this lists the real wired /
+  // Bluetooth / network printers the till can reach — one click adds one.
+  route('GET', '/printers/system', 'settings.manage', async (ctx) => {
+    requireCap('settings.manage')(ctx);
+    if (process.platform !== 'win32') return ctx.json([]);
+    try {
+      const ps = 'Get-Printer | Select-Object Name,DriverName,PortName,PrinterStatus | ConvertTo-Json -Compress';
+      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+        windowsHide: true,
+        timeout: 8000,
+      });
+      let rows = [];
+      try {
+        rows = JSON.parse(stdout || 'null') ?? [];
+      } catch {
+        return ctx.json([]);
+      }
+      if (!Array.isArray(rows)) rows = [rows];
+      return ctx.json(
+        rows.map((r) => ({
+          name: r.Name || '',
+          driver: r.DriverName || '',
+          port: r.PortName || '',
+          connection: classifyPort(r.PortName),
+          status: r.PrinterStatus === 3 ? 'Ready' : r.PrinterStatus === 1 ? 'Paused' : 'Unknown',
+        })),
+      );
+    } catch {
+      // Get-Printer unavailable / timed out — degrade to empty, never 500.
+      return ctx.json([]);
+    }
+  });
   route('GET', '/printers', null, (ctx) =>
     ctx.json(S.db.prepare('SELECT * FROM printers ORDER BY is_default DESC, name').all()),
   );

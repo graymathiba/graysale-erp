@@ -45,10 +45,10 @@ export const DESKTOP_MENUS = [
   {
     title: 'Maintenance',
     items: [
+      { label: 'Company Profile', route: '/desktop/company', icon: 'doc', cap: 'settings.manage' },
       { label: 'Hardware Setup', action: 'hardware', icon: 'wrench', cap: 'settings.manage' },
       { label: 'Activity Log', action: 'activity', icon: 'log', cap: 'users.view' },
       { label: 'Data Storage', route: '/desktop/storage', icon: 'box' },
-      { label: 'Switch to Modern UI', action: 'modern', icon: 'door' },
     ],
   },
   {
@@ -60,8 +60,9 @@ export const DESKTOP_MENUS = [
   },
 ];
 
-// Bottom-of-screen shortcut toolbar (15 tiles, Retail Man style).
+// Bottom-of-screen shortcut toolbar (16 tiles, Retail Man style).
 export const DESKTOP_SHORTCUTS = [
+  { key: 'dashboard', label: 'Dashboard', route: '/desktop/dashboard', icon: 'chart' },
   { key: 'pos', label: 'Point of Sale', route: '/desktop/pos', icon: 'cart' },
   { key: 'stock', label: 'Stock', route: '/desktop/stock', icon: 'box' },
   { key: 'customers', label: 'Customers', route: '/desktop/customers', icon: 'user' },
@@ -82,6 +83,7 @@ export const DESKTOP_SHORTCUTS = [
 // Route table: desktop menu/shortcut routes -> the page that renders them.
 // Stubs and shell actions never reach here.
 export const DESKTOP_ROUTES = {
+  '/desktop/dashboard': 'dashboard',
   '/desktop/stock': 'stock',
   '/desktop/customers': 'customers',
   '/desktop/suppliers': 'suppliers',
@@ -93,6 +95,7 @@ export const DESKTOP_ROUTES = {
   '/desktop/settings': 'settings',
   '/desktop/users': 'users',
   '/desktop/storage': 'storage',
+  '/desktop/company': 'company',
   '/desktop/company-profile': 'company-profile',
   '/desktop/support': 'support',
 };

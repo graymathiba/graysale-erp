@@ -50,10 +50,6 @@ export default function DesktopShell() {
 
   const runAction = (action) => {
     setOpenMenu(null);
-    if (action === 'modern') {
-      navigate('/dashboard');
-      return;
-    }
     if (action.startsWith('stub:')) {
       setWin({ kind: 'stub', label: action.slice(5) });
       return;
@@ -87,9 +83,6 @@ export default function DesktopShell() {
           </button>
           <button className="dsk-title-btn" title="About GraySale" onClick={() => setWin({ kind: 'about' })}>
             <DesktopIcon name="info" size={14} />
-          </button>
-          <button className="dsk-title-btn" title="Switch to Modern UI" onClick={() => navigate('/dashboard')}>
-            <DesktopIcon name="door" size={14} />
           </button>
         </div>
       </div>

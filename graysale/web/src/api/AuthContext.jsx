@@ -128,8 +128,6 @@ export function AuthProvider({ children }) {
 
   const isAdmin = !!user && (user.role === 'owner' || user.role === 'manager');
   const isCashier = !!user && user.role === 'cashier';
-  // Global platform-admin flag surfaced by the backend (users.is_super_admin).
-  const isSuperAdmin = !!user && user.isSuperAdmin === true;
 
   return (
     <AuthContext.Provider
@@ -142,7 +140,6 @@ export function AuthProvider({ children }) {
         can,
         isAdmin,
         isCashier,
-        isSuperAdmin,
         needsActivation,
         refreshTenant,
         setUser,

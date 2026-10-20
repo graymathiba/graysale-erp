@@ -23,12 +23,6 @@ export default function DesktopHomePage() {
             {s.label}
           </button>
         ))}
-        {user?.isSuperAdmin && (
-          <button className="dsk-home-tile" onClick={() => navigate('/admin/control-tower')}>
-            <DesktopIcon name="monitor" size={22} />
-            Control Tower
-          </button>
-        )}
       </div>
     </div>
   );
