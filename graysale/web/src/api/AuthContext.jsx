@@ -50,6 +50,22 @@ export function AuthProvider({ children }) {
           setTenant(null);
         })
         .finally(() => setReady(true));
+    } else if (authStore.token) {
+      // Warm session: the identity is already cached, but the tenant snapshot
+      // in localStorage can be stale (e.g. activated in another tab, or the
+      // key was redeemed after this session was created). Refresh it in the
+      // background so needsActivation cannot loop against a frozen status.
+      fetchMe()
+        .then(({ user: u, tenant: t }) => {
+          setUser(u);
+          setTenant(t);
+          authStore.set({ token: authStore.token, user: u, tenant: t });
+        })
+        .catch(() => {
+          // Silently keep the optimistic session; the first real API call
+          // runs the standard 401 interceptor if the token is dead.
+        });
+      setReady(true);
     } else {
       setReady(true);
     }

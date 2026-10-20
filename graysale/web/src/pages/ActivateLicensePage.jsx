@@ -16,7 +16,7 @@ const STATUS_LABEL = {
 // Public-facing activation gate. Reachable without an active license, because
 // /license/* routes bypass the backend tenant gate entirely.
 export default function ActivateLicensePage() {
-  const { user, refreshTenant } = useAuth();
+  const { user, refreshTenant, logout } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const [status, setStatus] = useState(null);
@@ -46,8 +46,8 @@ export default function ActivateLicensePage() {
     try {
       await api.post('/license/activate', { key_code: keyCode.trim() });
       toast.ok('License activated!');
-      await refreshTenant();
-      navigate('/dashboard');
+      await refreshTenant().catch(() => {});
+      navigate('/desktop', { replace: true });
     } catch (ex) {
       setErr(ex.message || 'Activation failed. Check the key and try again.');
     } finally {
@@ -108,10 +108,32 @@ export default function ActivateLicensePage() {
               type="button"
               className="btn btn-primary btn-lg"
               style={{ width: '100%' }}
-              onClick={() => navigate('/dashboard')}
+              onClick={async () => {
+                // Re-pull the tenant first: if the context still holds a
+                // pre-activation snapshot, navigating would bounce straight
+                // back to this gate.
+                await refreshTenant().catch(() => {});
+                navigate('/desktop', { replace: true });
+              }}
             >
               Enter the store
             </button>
+            <p style={{ marginTop: 14, fontSize: 12.5, textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => logout()}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontSize: 12.5,
+                }}
+              >
+                Not the right account? Log out
+              </button>
+            </p>
           </>
         )}
       </form>

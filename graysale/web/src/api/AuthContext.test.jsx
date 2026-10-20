@@ -54,7 +54,9 @@ const renderAuth = () =>
 beforeEach(() => {
   authStore.clear();
   apiLogin.mockReset();
-  fetchMe.mockReset();
+  // Default: background refresh fails silently and the session is kept
+  // optimistically (tests that care configure their own resolution).
+  fetchMe.mockReset().mockRejectedValue(new Error('idle'));
   api.post.mockReset().mockResolvedValue({ ok: true });
 });
 
@@ -94,14 +96,38 @@ describe('AuthProvider boot', () => {
     expect(authStore.token).toBe('');
   });
 
-  it('does not call fetchMe when token and user are both persisted', async () => {
+  it('still boots instantly from a persisted session but refreshes the tenant in the background', async () => {
     authStore.token = 'tok';
     authStore.user = { id: 2, role: 'manager' };
+    authStore.tenant = { status: 'PENDING_ACTIVATION' };
+    fetchMe.mockResolvedValue({
+      user: { id: 2, role: 'manager' },
+      tenant: { status: 'ACTIVE' },
+    });
 
     renderAuth();
 
+    // Optimistic: no flicker to logged-out while the refresh is in flight.
     expect(screen.getByTestId('user').textContent).toBe('manager');
-    expect(fetchMe).not.toHaveBeenCalled();
+    expect(fetchMe).toHaveBeenCalledTimes(1);
+    // The stale pre-activation snapshot must be replaced so the license
+    // gate cannot loop the user back to /activate-license.
+    await waitFor(() => expect(screen.getByTestId('needs-activation').textContent).toBe('false'));
+    expect(authStore.tenant.status).toBe('ACTIVE');
+  });
+
+  it('keeps the optimistic session when the background refresh fails', async () => {
+    authStore.token = 'tok';
+    authStore.user = { id: 7, role: 'owner' };
+    authStore.tenant = { status: 'ACTIVE' };
+    fetchMe.mockRejectedValue(new Error('offline'));
+
+    renderAuth();
+
+    expect(screen.getByTestId('user').textContent).toBe('owner');
+    await waitFor(() => expect(fetchMe).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('user').textContent).toBe('owner');
+    expect(authStore.token).toBe('tok');
   });
 });
 
