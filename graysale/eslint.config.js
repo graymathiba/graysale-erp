@@ -11,7 +11,15 @@ const commonRules = {
 
 export default [
   {
-    ignores: ['node_modules/**', 'web/node_modules/**', 'web/dist/**', 'src/data/**', 'coverage/**'],
+    ignores: [
+      'node_modules/**',
+      'web/node_modules/**',
+      'web/dist/**',
+      'src/data/**',
+      'coverage/**',
+      // Packaging artifacts: extracted portable Node runtime + staged builds.
+      'dist/**',
+    ],
   },
   js.configs.recommended,
   // Node backend (src/, test/)

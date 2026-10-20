@@ -1,0 +1,50 @@
+GraySale {{VERSION}} - Install & first run (Windows)
+====================================================
+
+WHAT'S IN THIS FOLDER
+  GraySale.bat             Start the POS on this PC (double-click)
+  Add-Firewall-Rule.bat    One-time: let tills on other PCs connect
+  open-browser.bat         Used automatically by GraySale.bat
+  app\                     GraySale application
+  runtime\node\            Built-in Node.js runtime (nothing to install)
+  data\                    Your shop data is created here on first run
+  EULA.txt                 License agreement
+
+INSTALL (about 2 minutes)
+  1. Unpack the FULL zip into a permanent folder, e.g. C:\GraySale
+     (keep it out of Downloads - you will be updating this folder later)
+  2. Double-click GraySale.bat
+  3. Your browser opens the setup wizard at http://localhost:3030
+     - choose where to keep your data (the default data\ folder is fine)
+     - create your shop company + owner login
+     - paste the activation key supplied by your reseller
+  4. Log in, add your products, and sell from the POS screen.
+
+MULTIPLE TILLS ON THE LAN
+  1. On the hosting PC run Add-Firewall-Rule.bat once (right-click ->
+     Run as administrator).
+  2. Note the "LAN: http://192.168.x.x:3030" lines GraySale.bat prints.
+  3. On every till PC open that address in Chrome/Edge and log in.
+     Till PCs need no installation - the browser is enough.
+
+BACKING UP
+  Automatic snapshots land in data\backups every 24 hours (7 kept).
+  Admins can also run a backup from the app: Settings -> Backup.
+  Copy that folder off the PC weekly - a backup next to the PC only
+  protects against disk failure, not theft or fire.
+
+UPDATING
+  Close GraySale.bat, unpack the new version over the same folder,
+  and start again. data\ is never touched by updates.
+
+TROUBLESHOOTING
+  - "port 3030 already in use": another program holds the port. Start
+    with:  set PORT=3031  then run GraySale.bat again (and re-run the
+    firewall rule with 3031).
+  - Tills cannot connect: firewall rule not added, or both PCs are not
+    on the same network.
+  - Browser says "not secure": GraySale serves plain HTTP on your own
+    shop LAN, which is normal. Do not expose the port to the internet.
+  - Support: send the text printed in the GraySale.bat window.
+
+(c) {{YEAR}} GraySale. Licensed under the terms in EULA.txt.

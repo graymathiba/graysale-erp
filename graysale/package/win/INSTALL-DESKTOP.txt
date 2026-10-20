@@ -1,0 +1,50 @@
+GraySale {{VERSION}} - Desktop app install (Windows)
+====================================================
+
+WHAT THIS IS
+  GraySale now runs as a normal Windows program. On launch it starts its
+  own local server in the background and opens the till interface inside
+  the app window - no browser, no console, nothing to configure.
+
+CONTENTS
+  graysale_desktop.exe      the shop application (double-click this)
+  GraySaleServer\           the bundled server (do not delete or rename)
+  Add-Firewall-Rule.bat     one-time: let tills on other PCs connect
+  INSTALL.txt / EULA.txt / VERSION.txt
+
+INSTALL (about 1 minute)
+  1. Unpack the FULL zip into a permanent folder, e.g. C:\GraySale
+  2. Double-click graysale_desktop.exe
+     - first run prepares your data folder in
+       %LOCALAPPDATA%\GraySale\data
+     - the setup wizard opens inside the app: company, owner login,
+       activation key from your reseller
+  3. Log in and sell from the Point of Sale screen.
+
+MULTIPLE TILLS ON THE LAN
+  1. Run Add-Firewall-Rule.bat once on the hosting PC (right-click ->
+     Run as administrator).
+  2. On every till PC open http://<host PC name or IP>:3030 in
+     Chrome/Edge and log in. Till PCs need no installation.
+  3. To use a different port: set GRAYSALE_PORT=3031 before launching
+     the app (and re-run the firewall rule for that port).
+
+REQUIREMENTS
+  - Windows 10/11 64-bit
+  - WebView2 runtime (preinstalled on Windows 11 and current Windows 10;
+    if the app reports it missing, install "Microsoft Edge WebView2
+    Runtime" from Microsoft, or use the "Open in browser" button)
+  - First launch needs a moment to prepare the data folder; closing the
+    app stops the local server safely.
+
+BACKING UP
+  Automatic snapshots land in the data folder's backups\ subfolder every
+  24 hours (7 kept). Copy that folder off the PC weekly.
+
+TROUBLESHOOTING
+  - Port already in use: set GRAYSALE_PORT=3031 and relaunch.
+  - App says server bundle missing: the GraySaleServer folder was deleted
+    or moved - unpack the zip again, keeping the folder structure.
+  - Server log: %LOCALAPPDATA%\GraySale\server.log (send this to support)
+
+(c) {{YEAR}} GraySale. Licensed under the terms in EULA.txt.

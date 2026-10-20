@@ -1,0 +1,57 @@
+GRAYSALE END-USER LICENSE AGREEMENT (EULA)
+Version {{VERSION}} - {{DATE}}
+
+This agreement is between you ("Licensee") and GraySale ("Vendor") and
+covers the GraySale retail POS and accounting software, including the
+application, the bundled Node.js runtime and any activation key issued
+to you ("Software").
+
+1. GRANT OF LICENSE
+   Vendor grants you a non-exclusive, non-transferable, perpetual
+   license to install and use the Software on computers belonging to
+   your single business entity, for the number of till seats you have
+   purchased, for your internal retail and accounting operations.
+
+2. ACTIVATION
+   The Software requires an activation key issued by Vendor before it
+   exposes business data. Seats beyond your purchased count, or keys
+   that expire, suspend access until renewed. Circumventing activation
+   is prohibited.
+
+3. YOUR DATA
+   Your shop data stays on your machines. You own it. Vendor has no
+   access to it unless you voluntarily send logs or a backup for
+   support. You are responsible for keeping your own off-site backups.
+
+4. INSTALLATION & UPDATES
+   You may install updates Vendor supplies over the same installation
+   folder. Updates remain subject to this agreement.
+
+5. RESTRICTIONS
+   You may not rent, lease, sublicense or resell the Software; reverse
+   engineer, decompile or modify it except where law expressly allows;
+   or use it to provide a competing service to third parties.
+
+6. NO WARRANTIES
+   The Software is provided "AS IS" without warranty of any kind,
+   express or implied, including merchantability, fitness for a
+   particular purpose and non-infringement. Vendor does not warrant
+   uninterrupted or error-free operation.
+
+7. LIMITATION OF LIABILITY
+   To the maximum extent permitted by law, Vendor's total liability
+   under this agreement is limited to the amount you paid for the
+   Software. Vendor is not liable for indirect, incidental or
+   consequential damages, including lost profits or data.
+
+8. TERMINATION
+   This license terminates automatically if you breach it. On
+   termination you must stop using and destroy all copies of the
+   Software.
+
+9. GOVERNING LAW
+   This agreement is governed by the laws of the jurisdiction in which
+   Vendor supplied the Software, without regard to conflict-of-law
+   rules.
+
+(c) {{YEAR}} GraySale. All rights reserved.

@@ -8,7 +8,7 @@ Local-first retail POS + accounting suite: Node.js (SQLite) backend, React (Vite
 graysale/          Node backend + React web app
   src/             server, domain services, HTTP routes, DB schema/migrations
   src/http/routes/ per-domain route modules (auth, catalog, pos, accounting, ...)
-  test/            node:test suite (119 tests, incl. real-HTTP e2e)
+  test/            node:test suite (122 tests, incl. real-HTTP e2e)
   web/             Vite + React front-end (built to web/dist, served by the server)
 pos_app/           Flutter POS client (talks to http://localhost:3030/api/v1)
 ```
@@ -44,6 +44,16 @@ npm run lint                # ESLint (backend + web), 0 errors expected
 npm run format              # Prettier write
 npm run format:check        # Prettier verify (CI gate)
 npm --prefix web run test   # front-end Vitest suite
+```
+
+## Shipping (Windows package)
+
+One self-contained zip for shop PCs — bundled Node runtime, no npm install,
+double-click `GraySale.bat` to start (see `SELLING.md` for the runbook):
+
+```bash
+npm run build:web
+npm run package:win    # dist/GraySale-<version>-win-x64.zip (+ .sha256)
 ```
 
 ## Configuration

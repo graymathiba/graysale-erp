@@ -1,0 +1,45 @@
+GraySale KeyMaster {{VERSION}} - install & use
+==============================================
+
+WHAT THIS IS
+  KeyMaster is the VENDOR tool for GraySale. It is not part of the shop's
+  ERP: it generates and manages product keys and shows which shops are
+  connected to your Control Tower right now.
+
+CONTENTS
+  keymaster.exe   double-click to run (no install needed)
+  INSTALL.txt / EULA.txt / VERSION.txt
+
+SETUP
+  1. Unpack anywhere (keep the folder together).
+  2. Double-click keymaster.exe.
+  3. On first run enter your Control Tower address - the GraySale
+     instance where you host the platform (for example
+     https://tower.yourcompany.co.zw or http://127.0.0.1:3030 while
+     testing). The address is remembered.
+  4. Sign in with your PLATFORM (super-admin) account. Regular shop
+     logins are refused.
+
+WHAT YOU CAN DO
+  Dashboard   platform totals: active / blocked / expired / pending
+  Keys        search keys, filter by status, generate new keys and copy
+              the codes to send to customers
+  Tenants     block / unblock a shop, extend its licence by 30/90/365 days
+  Connected   live view of shops with a session in the last 5 minutes
+              (auto-refreshes every 30 seconds)
+
+SECURITY NOTES
+  - Your password is never stored; the sign-in token is kept only in
+    memory for the current run.
+  - KeyMaster needs a super-admin account - keep that account's password
+    strong; it can block every connected shop.
+  - Point it only at your own Control Tower URL.
+
+TROUBLESHOOTING
+  - "Session expired": sign in again.
+  - Connection refused: the Control Tower server is down or the URL /
+    port is wrong.
+  - No shops listed under Connected: shops appear once someone is signed
+    in on their ERP within the last 5 minutes.
+
+(c) {{YEAR}} GraySale. Licensed under the terms in EULA.txt.

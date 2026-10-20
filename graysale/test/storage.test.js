@@ -210,3 +210,20 @@ test('HTTP storage gate: 503 before setup, open after', async () => {
   const ok = await hit(handler, { url: '/api/v1/categories' });
   assert.notEqual(ok.status, 503, 'gate is open after setup');
 });
+
+test('HTTP health probe answers before setup and before activation', async () => {
+  const root = tempRoot();
+  const storage = new StorageService({ env: { GRAYSTORAGE_ROOT: root } });
+  const app = createApp({ storage });
+  const handler = createHttpServer(app);
+
+  const health = await hit(handler, { url: '/api/v1/health' });
+  assert.equal(health.status, 200);
+  assert.equal(health.body.ok, true);
+  assert.equal(health.body.phase, 'unconfigured');
+  assert.match(health.body.version, /^\d+\.\d+\.\d+/);
+
+  // Only the bare probe is exempt; deeper paths still fall through the gate.
+  const deep = await hit(handler, { url: '/api/v1/health/extra' });
+  assert.notEqual(deep.status, 200);
+});

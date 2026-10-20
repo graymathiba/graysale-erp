@@ -116,6 +116,8 @@ export function buildHandler(services) {
     requireCap,
     ownerOnly,
     superAdmin,
+    // registerLicensing audits Control Tower writes through the auth service.
+    auth: S.auth,
     NumID,
     dbSetting,
     setDefaultPrinter,
@@ -186,6 +188,8 @@ const SECURITY_HEADERS = {
 // so the flag is honoured no matter which module loads first.
 const requestLogEnabled = () => process.env.LOG_REQUESTS !== '0';
 
+const APP_VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
+
 export function createHttpServer(services) {
   const routes = buildHandler(services);
   const enforceTenantStatus = makeEnforceTenantStatus(services.db);
@@ -203,6 +207,17 @@ export function createHttpServer(services) {
     try {
       if (segments[0] === 'api' && segments[1] === 'v1') {
         const rest = segments.slice(2);
+        // Liveness probe — answered before the storage and licensing gates so
+        // a fresh install (and the Windows launcher waiting on boot) can tell
+        // "process is up" from "needs setup/activation". No domain data.
+        if (rest[0] === 'health' && rest.length === 1 && req.method === 'GET') {
+          return ctx.json({
+            ok: true,
+            version: APP_VERSION,
+            phase: (services.storage && services.storage.phase) || 'ready',
+            time: new Date().toISOString(),
+          });
+        }
         // Storage gate: until the data folder is configured on this machine
         // (first run, or a moved USB folder acknowledged), only setup/login /
         // license + Static tower-scope endpoints are reachable. Everything else
