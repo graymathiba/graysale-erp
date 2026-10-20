@@ -59,7 +59,7 @@ function RequireSuperAdmin({ children }) {
       </div>
     );
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.isSuperAdmin) return <Navigate to="/dashboard" replace />;
+  if (!user.isSuperAdmin) return <Navigate to="/desktop" replace />;
   return children;
 }
 
@@ -72,7 +72,7 @@ function RequireGuest({ children }) {
         Loading…
       </div>
     );
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/desktop" replace />;
   return children;
 }
 
@@ -182,7 +182,7 @@ function App() {
                 </RequireStorage>
               }
             >
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/desktop" replace />} />
               <Route path="/pos" element={<PosPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/accounting" element={<AccountingPage />} />
