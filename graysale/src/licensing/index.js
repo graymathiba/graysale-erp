@@ -39,4 +39,34 @@ export class LicensingService {
       ...this.keys.metrics(),
     };
   }
+
+  // Shops with a session that checked in within `windowMs` (default 5 min).
+  // Backs the KeyMaster "who is connected" screen. Presence comes from
+  // sessions.last_seen_at (throttled writes in auth), never from raw tokens.
+  connected(windowMs = 5 * 60_000) {
+    const cutoff = Date.now() - windowMs;
+    const rows = this.db
+      .prepare(
+        `SELECT u.tenant_id AS tenant_id, t.company_name AS company_name, t.status AS status,
+                COUNT(*) AS sessions, MAX(s.last_seen_at) AS last_seen_at
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+         LEFT JOIN tenants t ON t.id = u.tenant_id
+         WHERE s.last_seen_at >= ? AND s.expires_at > ?
+         GROUP BY u.tenant_id
+         ORDER BY last_seen_at DESC`,
+      )
+      .all(cutoff, new Date().toISOString());
+    return {
+      windowMs,
+      checkedAt: new Date().toISOString(),
+      tenants: rows.map((r) => ({
+        tenantId: r.tenant_id || null,
+        companyName: r.company_name || '(platform)',
+        status: r.status || null,
+        sessions: Number(r.sessions) || 0,
+        lastSeenAt: Number(r.last_seen_at) || null,
+      })),
+    };
+  }
 }

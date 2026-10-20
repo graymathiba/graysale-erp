@@ -140,3 +140,87 @@ test('happy path: login → open shift → sell → report → Z-close → backu
   // Backup endpoints are admin-only even when authenticated.
   assert.equal((await call('/settings/backup', { method: 'POST' })).status, 401);
 });
+
+test('activation flow: Control Tower mints a key, tenant redeems it, ERP opens', async () => {
+  server?.closeAllConnections?.();
+  server?.close();
+  try {
+    app?.db.close();
+  } catch {
+    /* already closed */
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'graysale-e2e-lic-'));
+  app = createApp({ dbPath: join(dir, 'lic.db') });
+  const licHandler = createHttpServer(app);
+  server = http.createServer((req, res) => licHandler(req, res));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  base = `http://127.0.0.1:${server.address().port}/api/v1`;
+
+  // Fresh tenant is PENDING_ACTIVATION: ERP data is refused with 402.
+  const blocked = await call('/orders');
+  assert.equal(blocked.status, 402);
+  assert.equal((await call('/license/status')).data.activationRequired, true);
+
+  const login = await call('/auth/login', { method: 'POST', body: { username: 'admin', password: 'admin123' } });
+  assert.equal(login.status, 200);
+  const token = login.data.token;
+
+  // Control Tower key generation (regression: licensing routes crashed on the
+  // missing `auth` bag entry and every /superadmin write answered 500).
+  const gen = await call('/superadmin/keys/generate', {
+    method: 'POST',
+    token,
+    body: { planType: 'LIFETIME', count: 1 },
+  });
+  assert.equal(gen.status, 201, JSON.stringify(gen.data));
+  const keyCode = gen.data.keys[0].keyCode;
+  assert.match(keyCode, /^GS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+
+  // Reuse is refused; a fresh key activates the tenant.
+  const reuse = await call('/license/activate', { method: 'POST', body: { keyCode } });
+  assert.equal(reuse.status, 200, JSON.stringify(reuse.data));
+  assert.equal(reuse.data.tenant.status, 'ACTIVE');
+  const again = await call('/license/activate', { method: 'POST', body: { keyCode } });
+  assert.equal(again.status, 400);
+  assert.equal(again.data.code, 'KEY_ALREADY_USED');
+
+  assert.equal((await call('/orders', { token })).status, 200);
+});
+
+test('KeyMaster presence: /superadmin/connected reports live sessions', async () => {
+  server?.closeAllConnections?.();
+  server?.close();
+  try {
+    app?.db.close();
+  } catch {
+    /* already closed */
+  }
+  await boot();
+
+  // Anonymous is refused; shape is stable before anyone has signed in.
+  assert.equal((await call('/superadmin/connected')).status, 401);
+  const login = await call('/auth/login', { method: 'POST', body: { username: 'admin', password: 'admin123' } });
+  assert.equal(login.status, 200);
+  const token = login.data.token;
+
+  const first = await call('/superadmin/connected', { token });
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.windowMs, 5 * 60_000, 'default presence window');
+  assert.ok(Array.isArray(first.data.tenants));
+  const me = first.data.tenants.find((t) => t.companyName);
+  assert.ok(me, 'the signed-in instance reports itself');
+  assert.ok(me.sessions >= 1);
+  assert.ok(me.lastSeenAt >= Date.now() - 60_000, 'presence stamped by the authenticated call');
+
+  // windowMs is clamped: garbage or out-of-range values fall back to 5 min.
+  assert.equal((await call('/superadmin/connected?windowMs=1234', { token })).data.windowMs, 5 * 60_000);
+  assert.equal((await call('/superadmin/connected?windowMs=999999999', { token })).data.windowMs, 5 * 60_000);
+  assert.equal((await call('/superadmin/connected?windowMs=600000', { token })).data.windowMs, 600_000);
+
+  // Schema v13 carries the presence column.
+  const cols = app.db
+    .prepare('PRAGMA table_info(sessions)')
+    .all()
+    .map((c) => c.name);
+  assert.ok(cols.includes('last_seen_at'));
+});

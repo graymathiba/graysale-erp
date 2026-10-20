@@ -414,7 +414,8 @@ export class AuthService {
     if (!token) return null;
     const now = new Date().toISOString();
     const select = `
-      SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+      SELECT u.*, s.last_seen_at AS session_last_seen
+      FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = ? AND s.expires_at > ? AND u.active = 1
     `;
     let row = this.db.prepare(select).get(hashToken(token), now);
@@ -427,7 +428,20 @@ export class AuthService {
         row = legacy;
       }
     }
+    if (row) this._touchSession(hashToken(token), row.session_last_seen);
     return row ? this.publicUser(row) : null;
+  }
+
+  // Presence for /superadmin/connected: stamp last_seen_at at most once per
+  // minute per session so a busy till does not turn every request into a write.
+  _touchSession(tokenHash, lastSeenRaw) {
+    const last = Number(lastSeenRaw) || 0;
+    if (Date.now() - last < 60_000) return;
+    try {
+      this.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE token = ?').run(Date.now(), tokenHash);
+    } catch {
+      /* pre-v13 schema or closed handle: presence is best-effort */
+    }
   }
 
   hasPermission(user, capability) {

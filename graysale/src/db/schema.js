@@ -1013,6 +1013,31 @@ export function runMigrations(db) {
       /* already migrated */
     }
   });
+
+  // v13: presence tracking for the KeyMaster vendor app.
+  //   sessions.last_seen_at (epoch ms) is stamped by auth on each request,
+  //   throttled to one write per minute per session. /superadmin/connected
+  //   reads it to answer "which shops are on the system right now" without
+  //   shipping raw session tokens anywhere.
+  step(13, 'sessions-last-seen', () => {
+    try {
+      db.exec('BEGIN');
+      try {
+        const cols = db
+          .prepare('PRAGMA table_info(sessions)')
+          .all()
+          .map((c) => c.name);
+        if (!cols.includes('last_seen_at')) db.exec('ALTER TABLE sessions ADD COLUMN last_seen_at INTEGER');
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('schema.version', '13')").run();
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    } catch (e) {
+      /* already migrated */
+    }
+  });
 }
 
 function uuidv4() {

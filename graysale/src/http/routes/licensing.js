@@ -7,6 +7,15 @@ export function registerLicensing({ route, services: S, licensing, superAdmin, a
     return ctx.json(licensing.overview());
   });
 
+  // KeyMaster: which shops have a live session right now (presence window
+  // configurable ?windowMs=, max 1h). Read-only, super-admin only.
+  route('GET', '/superadmin/connected', null, async (ctx) => {
+    superAdmin(ctx);
+    const raw = Number(ctx.query.windowMs);
+    const windowMs = Number.isFinite(raw) && raw >= 60_000 && raw <= 3600_000 ? raw : 5 * 60_000;
+    return ctx.json(licensing.connected(windowMs));
+  });
+
   route('GET', '/superadmin/tenants', null, async (ctx) => {
     superAdmin(ctx);
     return ctx.json(licensing.tenants.list({ search: ctx.query.search, status: ctx.query.status }));
