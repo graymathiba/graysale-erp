@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api.dart';
 
 const _kUrlPref = 'control_tower_url';
-const _kDefaultUrl = 'https://localhost:3030';
+const _kDefaultUrl = 'http://localhost:3030';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onSignedIn});
@@ -86,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Unexpected error — check the URL and try again';
+        _error = 'Unexpected error â€” check the URL and try again';
       });
     }
   }
@@ -134,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _urlController,
                         decoration: const InputDecoration(
                           labelText: 'Control Tower URL',
-                          hintText: 'https://localhost:3030',
+                          hintText: 'http://localhost:3030',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),

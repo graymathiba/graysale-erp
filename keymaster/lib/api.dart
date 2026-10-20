@@ -70,6 +70,10 @@ class ApiClient {
     while (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
     }
+    // Accept "localhost:3030" or "192.168.0.5:3030" typed without a scheme.
+    if (base.isNotEmpty && !base.startsWith('http://') && !base.startsWith('https://')) {
+      base = 'http://$base';
+    }
     final root = base.contains('/api/v1') ? base : '$base/api/v1';
     final params = <String, String>{...?query}
       ..removeWhere((_, v) => v.isEmpty);
@@ -104,6 +108,11 @@ class ApiClient {
     }
   }
 
+  String _unreachable() =>
+      'Cannot reach server at $baseUrl. Check the address (http://host:3030 — '
+      'no https), that the GraySale server is running, and that this PC can '
+      'reach it (same network for a remote Control Tower).';
+
   Future<dynamic> _send(
     String method,
     String path, {
@@ -124,7 +133,21 @@ class ApiClient {
     } on TimeoutException {
       throw ApiException('Server at $baseUrl did not respond (timeout)');
     } catch (_) {
-      throw ApiException('Cannot reach server at $baseUrl');
+      // GraySale serves plain HTTP. A stale https:// address (older build or
+      // typed by hand) fails the TLS handshake - retry once over http.
+      final url = request.url;
+      if (url.scheme == 'https') {
+        final fallback = http.Request(method, url.replace(scheme: 'http'))
+          ..headers.addAll(request.headers)
+          ..body = request.body;
+        try {
+          res = await http.Client().send(fallback).timeout(_timeout);
+        } catch (_) {
+          throw ApiException(_unreachable());
+        }
+      } else {
+        throw ApiException(_unreachable());
+      }
     }
 
     final text = await res.stream.bytesToString();
