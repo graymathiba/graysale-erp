@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>GraySale Cloud Portal</title>
+    <style>
+      :root {
+        --navy: #123d69;
+        --navy-2: #0b2a4a;
+        --blue: #0d6efd;
+        --green: #22c55e;
+        --ink: #10243a;
+        --muted: #5b6b7c;
+        --line: #dbe4ee;
+        --paper: #f4f7fb;
+        --card: #ffffff;
+        --danger: #b42318;
+        --shadow: 0 14px 40px rgba(18, 61, 105, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top left, #e8f1ff 0, transparent 38%), var(--paper);
+        color: var(--ink);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      .shell { max-width: 1180px; margin: 0 auto; padding: 26px 18px 60px; }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+      .brand-mark {
+        width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
+        background: linear-gradient(145deg, var(--navy), var(--blue)); color: #fff;
+        font-weight: 800; letter-spacing: -1px; box-shadow: 0 8px 20px rgba(13, 110, 253, 0.28);
+      }
+      .brand h1 { margin: 0; font-size: 20px; letter-spacing: -0.4px; }
+      .brand p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+      .card {
+        background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+        box-shadow: var(--shadow); overflow: hidden;
+      }
+      .login {
+        max-width: 470px; margin: 8vh auto 0; padding: 28px;
+      }
+      .login h2 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.6px; }
+      .login p { margin: 0 0 20px; color: var(--muted); line-height: 1.5; }
+      label { display: block; font-size: 12px; font-weight: 700; color: var(--navy); margin: 0 0 6px; }
+      .field { margin-bottom: 14px; }
+      input[type="text"], input[type="password"], input[type="number"] {
+        width: 100%; border: 1px solid #c8d5e3; border-radius: 10px; padding: 11px 12px;
+        background: #fff; color: var(--ink); outline: none;
+      }
+      input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.13); }
+      .btn {
+        border: 0; border-radius: 10px; padding: 11px 16px; font-weight: 700;
+        background: var(--navy); color: #fff; transition: transform 0.08s ease, opacity 0.15s ease;
+      }
+      .btn:hover { opacity: 0.92; }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .btn.primary { background: linear-gradient(135deg, var(--navy), var(--blue)); }
+      .btn.ghost { background: #eef4fb; color: var(--navy); }
+      .btn.small { padding: 7px 11px; font-size: 12px; border-radius: 8px; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .grow { flex: 1; }
+      .topbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 18px 20px; border-bottom: 1px solid var(--line); background: #fff;
+      }
+      .topbar h2 { margin: 0; font-size: 20px; letter-spacing: -0.4px; }
+      .topbar .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+        padding: 5px 10px; font-size: 11px; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 0.4px; background: #e9f8ef; color: #166534;
+      }
+      .badge.off { background: #fef0ef; color: var(--danger); }
+      .content { padding: 20px; }
+      .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+      .search { flex: 1; min-width: 220px; }
+      .note { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0 0 14px; }
+      .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+      table { border-collapse: collapse; width: 100%; min-width: 720px; }
+      th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; }
+      th { background: #f7fafd; color: var(--navy); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+      tr:last-child td { border-bottom: 0; }
+      tbody tr:hover { background: #f9fbfe; }
+      .num { text-align: right; white-space: nowrap; }
+      .muted { color: var(--muted); }
+      .pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+      .pill.on { background: #e9f8ef; color: #166534; }
+      .pill.off { background: #fef0ef; color: var(--danger); }
+      .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+      .editor {
+        display: none; margin-bottom: 18px; border: 1px solid #cfe0f3; border-radius: 14px;
+        background: linear-gradient(180deg, #f7fbff, #fff); padding: 18px;
+      }
+      .editor.open { display: block; }
+      .editor h3 { margin: 0 0 12px; font-size: 16px; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .toast {
+        position: fixed; right: 20px; bottom: 20px; max-width: 420px; padding: 12px 14px;
+        border-radius: 12px; background: var(--navy); color: #fff; box-shadow: var(--shadow);
+        display: none; line-height: 1.45; font-size: 13px; z-index: 20;
+      }
+      .toast.err { background: var(--danger); }
+      .toast.show { display: block; }
+      .hint { margin-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .hidden { display: none !important; }
+      @media (max-width: 640px) {
+        .shell { padding: 16px 10px 40px; }
+        .login { margin-top: 10px; padding: 22px; }
+        .content, .topbar { padding: 14px; }
+        .grid2 { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="brand">
+        <div class="brand-mark">01</div>
+        <div>
+          <h1>GraySale Cloud Portal</h1>
+          <p>Edit catalogue and prices from anywhere. Changes sync to the store server.</p>
+        </div>
+      </div>
+
+      <section id="loginView" class="card login">
+        <h2>Store sign in</h2>
+        <p>Enter the Store ID and portal key shown in GraySale under Settings &rarr; Cloud Portal.</p>
+        <form id="loginForm">
+          <div class="field">
+            <label for="tenantId">Store ID</label>
+            <input id="tenantId" name="tenantId" type="text" autocomplete="username" spellcheck="false" required />
+          </div>
+          <div class="field">
+            <label for="portalKey">Portal key</label>
+            <input id="portalKey" name="portalKey" type="password" autocomplete="current-password" spellcheck="false" required />
+          </div>
+          <button id="loginBtn" class="btn primary" type="submit" style="width: 100%">Sign in</button>
+          <div class="hint">The portal key is generated on the store server and can be rotated there at any time.</div>
+        </form>
+      </section>
+
+      <section id="appView" class="card hidden">
+        <div class="topbar">
+          <div>
+            <h2 id="companyName">Catalogue</h2>
+            <div class="meta" id="tenantMeta"></div>
+          </div>
+          <div class="row">
+            <span id="statusBadge" class="badge">Active</span>
+            <button id="refreshBtn" class="btn ghost small" type="button">Refresh</button>
+            <button id="logoutBtn" class="btn ghost small" type="button">Sign out</button>
+          </div>
+        </div>
+        <div class="content">
+          <div id="editor" class="editor">
+            <h3>Edit product</h3>
+            <form id="editForm">
+              <input id="editId" type="hidden" />
+              <div class="grid2">
+                <div class="field">
+                  <label for="editName">Name</label>
+                  <input id="editName" type="text" required />
+                </div>
+                <div class="field">
+                  <label for="editSku">SKU</label>
+                  <input id="editSku" type="text" required />
+                </div>
+                <div class="field">
+                  <label for="editBarcode">Barcode</label>
+                  <input id="editBarcode" type="text" />
+                </div>
+                <div class="field">
+                  <label for="editPrice">Price</label>
+                  <input id="editPrice" type="number" min="0" step="0.01" required />
+                </div>
+                <div class="field">
+                  <label for="editCost">Cost</label>
+                  <input id="editCost" type="number" min="0" step="0.01" />
+                </div>
+                <div class="field">
+                  <label for="editActive">Status</label>
+                  <label class="row" style="font-weight: 400; color: var(--ink); margin-top: 10px">
+                    <input id="editActive" type="checkbox" style="width: auto" /> Active in catalogue
+                  </label>
+                </div>
+              </div>
+              <div class="row" style="margin-top: 6px">
+                <button id="saveBtn" class="btn primary" type="submit">Save changes</button>
+                <button id="cancelBtn" class="btn ghost" type="button">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="toolbar">
+            <input id="search" class="search" type="text" placeholder="Search name, SKU or barcode" />
+            <label class="row" style="margin: 0; font-size: 12px; color: var(--muted)">
+              <input id="inactiveOnly" type="checkbox" style="width: auto" /> Inactive only
+            </label>
+            <span id="countLabel" class="muted" style="font-size: 12px"></span>
+          </div>
+          <p class="note">
+            Changes are stored in Supabase and pulled by the store server on its next sync (normally within 5 minutes).
+            Stock quantities stay local to the till.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>SKU</th>
+                  <th>Barcode</th>
+                  <th class="num">Price</th>
+                  <th class="num">Cost</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="productRows"></tbody>
+            </table>
+            <div id="emptyState" class="empty hidden">No products match this view.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>window.GRAYSALE_CLOUD = __GRAYSALE_CLOUD_CONFIG__;</script>
+    <script>
+      (() => {
+        const cfg = window.GRAYSALE_CLOUD || {};
+        const sessionKey = "graysale.portal.session";
+        const state = {
+          tenantId: "",
+          key: "",
+          currency: "$",
+          companyName: "",
+          products: [],
+          editingId: null,
+          busy: false,
+        };
+
+        const el = (id) => document.getElementById(id);
+        const loginView = el("loginView");
+        const appView = el("appView");
+        const toastEl = el("toast");
+
+        function showToast(message, isError = false) {
+          toastEl.textContent = message;
+          toastEl.className = `toast show${isError ? " err" : ""}`;
+          clearTimeout(showToast.timer);
+          showToast.timer = setTimeout(() => (toastEl.className = "toast"), 5000);
+        }
+
+        function friendly(message) {
+          const text = String(message || "Request failed");
+          if (text.includes("PORTAL_ACCESS_DENIED")) return "That portal key is not valid for this store.";
+          if (text.includes("PRODUCT_SKU_EXISTS")) return "Another product already uses that SKU.";
+          if (text.includes("PRODUCT_BARCODE_EXISTS")) return "Another product already uses that barcode.";
+          if (text.includes("PRODUCT_NOT_FOUND")) return "This product no longer exists in the cloud catalogue.";
+          if (text.includes("PRODUCT_NAME_REQUIRED")) return "Enter a product name.";
+          if (text.includes("SKU_REQUIRED")) return "Enter a SKU.";
+          if (text.includes("PRODUCT_PRICE_INVALID")) return "Price and cost must be zero or more.";
+          return text;
+        }
+
+        async function rpc(name, body) {
+          if (!cfg.supabaseUrl || !cfg.anonKey) {
+            throw new Error("Portal configuration is missing. Publish the portal from the store server.");
+          }
+          const res = await fetch(`${cfg.supabaseUrl.replace(/\/+$/, "")}/rest/v1/rpc/${name}`, {
+            method: "POST",
+            headers: {
+              apikey: cfg.anonKey,
+              Authorization: `Bearer ${cfg.anonKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const message = data?.message || data?.hint || data?.details || `Request failed (${res.status})`;
+            throw new Error(message);
+          }
+          return data;
+        }
+
+        function money(cents) {
+          const value = Number(cents || 0) / 100;
+          return `${state.currency}${value.toFixed(2)}`;
+        }
+
+        function toCents(value) {
+          const n = Number(value);
+          return Number.isFinite(n) ? Math.round(n * 100) : 0;
+        }
+
+        function toMajor(cents) {
+          return (Number(cents || 0) / 100).toFixed(2);
+        }
+
+        function saveSession() {
+          sessionStorage.setItem(sessionKey, JSON.stringify({ tenantId: state.tenantId, key: state.key }));
+        }
+
+        function clearSession() {
+          sessionStorage.removeItem(sessionKey);
+        }
+
+        function showLogin() {
+          appView.classList.add("hidden");
+          loginView.classList.remove("hidden");
+          el("tenantId").value = state.tenantId || "";
+          el("portalKey").value = "";
+          el("portalKey").focus();
+        }
+
+        function showApp() {
+          loginView.classList.add("hidden");
+          appView.classList.remove("hidden");
+        }
+
+        function setBusy(flag) {
+          state.busy = flag;
+          el("loginBtn").disabled = flag;
+          el("saveBtn").disabled = flag;
+          el("refreshBtn").disabled = flag;
+        }
+
+        async function login(tenantId, key) {
+          setBusy(true);
+          try {
+            const session = await rpc("portal_login", { p_tenant: tenantId, p_key: key });
+            state.tenantId = tenantId;
+            state.key = key;
+            state.companyName = session.companyName || "Store catalogue";
+            state.currency = session.currency || "$";
+            saveSession();
+            showApp();
+            await loadProducts();
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        async function loadProducts() {
+          const rows = await rpc("portal_products", { p_tenant: state.tenantId, p_key: state.key });
+          state.products = Array.isArray(rows) ? rows : [];
+          el("companyName").textContent = state.companyName || "Store catalogue";
+          el("tenantMeta").textContent = `Store ID: ${state.tenantId}`;
+          render();
+        }
+
+        function filteredProducts() {
+          const term = el("search").value.trim().toLowerCase();
+          const inactiveOnly = el("inactiveOnly").checked;
+          return state.products.filter((p) => {
+            if (inactiveOnly && Number(p.active) !== 0) return false;
+            if (!term) return true;
+            return [p.name, p.sku, p.barcode].some((v) => String(v || "").toLowerCase().includes(term));
+          });
+        }
+
+        function render() {
+          const rows = filteredProducts();
+          const tbody = el("productRows");
+          tbody.replaceChildren();
+          el("countLabel").textContent = `${rows.length} of ${state.products.length} products`;
+          el("emptyState").classList.toggle("hidden", rows.length > 0);
+          for (const p of rows) {
+            const tr = document.createElement("tr");
+            const name = document.createElement("td");
+            name.textContent = p.name || "";
+            const sku = document.createElement("td");
+            sku.textContent = p.sku || "";
+            const barcode = document.createElement("td");
+            barcode.textContent = p.barcode || "—";
+            barcode.className = p.barcode ? "" : "muted";
+            const price = document.createElement("td");
+            price.textContent = money(p.price_cents);
+            price.className = "num";
+            const cost = document.createElement("td");
+            cost.textContent = money(p.cost_cents);
+            cost.className = "num";
+            const status = document.createElement("td");
+            const pill = document.createElement("span");
+            pill.className = `pill ${Number(p.active) === 0 ? "off" : "on"}`;
+            pill.textContent = Number(p.active) === 0 ? "Inactive" : "Active";
+            status.appendChild(pill);
+            const updated = document.createElement("td");
+            updated.textContent = p.updated_at ? new Date(p.updated_at).toLocaleString() : "—";
+            updated.className = "muted";
+            const actions = document.createElement("td");
+            actions.className = "num";
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "btn ghost small";
+            edit.textContent = "Edit";
+            edit.dataset.id = String(p.local_id);
+            actions.appendChild(edit);
+            tr.append(name, sku, barcode, price, cost, status, updated, actions);
+            tbody.appendChild(tr);
+          }
+        }
+
+        function openEditor(id) {
+          const p = state.products.find((x) => Number(x.local_id) === Number(id));
+          if (!p) return;
+          state.editingId = Number(id);
+          el("editId").value = String(id);
+          el("editName").value = p.name || "";
+          el("editSku").value = p.sku || "";
+          el("editBarcode").value = p.barcode || "";
+          el("editPrice").value = toMajor(p.price_cents);
+          el("editCost").value = toMajor(p.cost_cents);
+          el("editActive").checked = Number(p.active) !== 0;
+          el("editor").classList.add("open");
+          el("editName").focus();
+          el("editor").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+
+        function closeEditor() {
+          state.editingId = null;
+          el("editor").classList.remove("open");
+          el("editForm").reset();
+        }
+
+        async function saveProduct() {
+          if (state.editingId == null) return;
+          const name = el("editName").value.trim();
+          const sku = el("editSku").value.trim();
+          if (!name || !sku) {
+            showToast("Name and SKU are required.", true);
+            return;
+          }
+          setBusy(true);
+          try {
+            await rpc("portal_update_product", {
+              p_tenant: state.tenantId,
+              p_key: state.key,
+              p_local_id: state.editingId,
+              p_name: name,
+              p_sku: sku,
+              p_barcode: el("editBarcode").value.trim() || null,
+              p_price_cents: toCents(el("editPrice").value),
+              p_cost_cents: toCents(el("editCost").value || 0),
+              p_active: el("editActive").checked ? 1 : 0,
+            });
+            closeEditor();
+            await loadProducts();
+            showToast("Product saved. The store will pick it up on the next sync.");
+          } finally {
+            setBusy(false);
+          }
+        }
+
+        el("loginForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const tenantId = el("tenantId").value.trim();
+          const key = el("portalKey").value.trim();
+          if (!tenantId || !key) return;
+          try {
+            await login(tenantId, key);
+          } catch (e) {
+            clearSession();
+            showToast(friendly(e.message), true);
+          }
+        });
+
+        el("logoutBtn").addEventListener("click", () => {
+          clearSession();
+          state.key = "";
+          state.products = [];
+          closeEditor();
+          showLogin();
+        });
+
+        el("refreshBtn").addEventListener("click", async () => {
+          try {
+            setBusy(true);
+            await loadProducts();
+            showToast("Catalogue refreshed.");
+          } catch (e) {
+            showToast(friendly(e.message), true);
+          } finally {
+            setBusy(false);
+          }
+        });
+
+        el("search").addEventListener("input", render);
+        el("inactiveOnly").addEventListener("change", render);
+
+        el("productRows").addEventListener("click", (event) => {
+          const button = event.target.closest("button[data-id]");
+          if (button) openEditor(button.dataset.id);
+        });
+
+        el("cancelBtn").addEventListener("click", closeEditor);
+        el("editForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          try {
+            await saveProduct();
+          } catch (e) {
+            showToast(friendly(e.message), true);
+          }
+        });
+
+        (async function boot() {
+          const raw = sessionStorage.getItem(sessionKey);
+          if (!raw) return showLogin();
+          try {
+            const saved = JSON.parse(raw);
+            state.tenantId = saved.tenantId || "";
+            if (!saved.tenantId || !saved.key) return showLogin();
+            await login(saved.tenantId, saved.key);
+          } catch (e) {
+            clearSession();
+            showLogin();
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>
